@@ -1,0 +1,26 @@
+from enum import Enum
+
+
+class Operator(Enum):
+    EQ = '='
+    NE = '!='
+    GT = '>'
+    LT = '<'
+    GE = '>='
+    LE = '<='
+    LIKE = 'LIKE'
+    NOT_LIKE = 'NOT LIKE'
+    IN = 'IN'
+    NOT_IN = 'NOT IN'
+    IS_NULL = 'IS NULL'
+    IS_NOT_NULL = 'IS NOT NULL'
+    BETWEEN = 'BETWEEN'
+    NOT_BETWEEN = 'NOT BETWEEN'
+    AND = 'AND'
+    OR = 'OR'
+    NOT = 'NOT'
+    ADD = '+'
+    SUB = '-'
+    MUL = '*'
+    DIV = '/'
+    MOD = '%'
