@@ -126,6 +126,25 @@ class DictQuery:
         conn = self._datasource.get_connection()
         return select_many(sql, args, conn)
 
+    def page(self, page: int, page_size: int) -> tuple[tuple[dict[str, Any], ...], int]:
+        self._limit = page_size
+        self._offset = (page - 1) * page_size
+        sql, args = self._build_select()
+        conn = self._datasource.get_connection()
+        rows: tuple[dict[str, Any], ...] = select_many(sql, args, conn)
+        count = self.count()
+        return rows, count
+
+    def count(self) -> int:
+        sql = f'SELECT COUNT(*) FROM {self._database}.{self._table}'
+        args = ()
+        tree = self._where.tree()
+        if len(tree.conditions) > 0:
+            exp, args = tree.parse()
+            sql += ' WHERE ' + exp
+        conn = self._datasource.get_connection()
+        return select_one(sql, args, conn)['COUNT(*)']
+
     def _build_select(self) -> tuple[str, tuple[Any, ...]]:
         # select_fields exclude ignore_fields
         if not self._select_fields:
@@ -221,6 +240,10 @@ class Query(DictQuery):
     def list(self) -> List[object]:
         rows: tuple[dict[str, Any], ...] = super().list()
         return [self._model(**row) for row in rows]
+
+    def page(self, page: int, page_size: int) -> tuple[List[object], int]:
+        rows, count = super().page(page, page_size)
+        return [self._model(**row) for row in rows], count
 
 
 def query(table: str | IEntity, database: str | None = None, data_source: IDataSource | None = None):

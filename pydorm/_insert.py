@@ -3,7 +3,7 @@ from typing import Any
 
 from ._dorm import dorm
 from ._models import models
-from ._mysql_executor import execute
+from ._mysql_executor import execute, executemany
 from .protocols import IEntity, IDataSource
 
 
@@ -56,10 +56,32 @@ class Insert:
         args = tuple(values)
         return sql, args
 
+    def insert_bulk(self, data: list[dict]) -> int:
+        if data is None or len(data) == 0:
+            raise ValueError('data is required')
+
+        sql, args = self._build_insert_bulk(data)
+        conn = self._datasource.get_connection()
+        return executemany(sql, args, conn)
+
+    def _build_insert_bulk(self, data: list[dict]) -> tuple[str, list[tuple[any, ...]]]:
+        placeholder = []
+        keys = []
+        values = []
+        model_fields = [f.name for f in fields(self._model)]
+        for k, v in data[0].items():
+            if k in model_fields:
+                keys.append(k)
+                values.append(v)
+                placeholder.append('?')
+        sql = f'INSERT INTO {self._database}.{self._table} ({",".join(keys)}) VALUES ({",".join(placeholder)})'
+        args = [tuple(datum.values()) for datum in data]
+        return sql, args
+
 
 def insert(table: str | IEntity, data: dict = None, database: str | None = None, data_source: IDataSource | None = None) -> (int, int):
     return Insert(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database()).insert(data)
 
 
-def insert_bulk():
-    ...
+def insert_bulk(table: str | IEntity, data: list[dict] = None, database: str | None = None, data_source: IDataSource | None = None):
+    return Insert(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database()).insert_bulk(data)

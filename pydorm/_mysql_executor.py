@@ -51,6 +51,7 @@ def select_many(sql: str, args: tuple[Any, ...], conn: Connection) -> tuple[dict
         raise e
     finally:
         cursor.close()
+        conn.close()
 
 
 def execute(sql: str, args: tuple[Any, ...], conn: Connection, is_insert=False) -> (int, int):
@@ -66,6 +67,23 @@ def execute(sql: str, args: tuple[Any, ...], conn: Connection, is_insert=False) 
             last_row_id = cursor.lastrowid
         conn.commit()
         return row_affected, last_row_id
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def executemany(sql: str, args: list[tuple[any, ...]], conn) -> int:
+    debug(sql, args)
+    conn.begin()
+    cursor = conn.cursor()
+    try:
+        sql = sql.replace('?', '%s')
+        row_affected = cursor.executemany(sql, args)
+        conn.commit()
+        return row_affected
     except Exception as e:
         conn.rollback()
         raise e

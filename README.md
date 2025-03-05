@@ -49,7 +49,7 @@ datasource:
 ```
 ### 2.CURD示例
 ```python
-from pydorm import init, dorm, dict_query, query, update, insert
+from pydorm import init, dorm, dict_query, query, update, insert, insert_bulk
 
 if __name__ == '__main__':
     # 初始化
@@ -78,4 +78,10 @@ if __name__ == '__main__':
 
     # 插入数据，返回影响行数和主键
     print(insert('test_table', {'name': 'new_record', 'type': 2}))
+
+    # 批量插入
+    print(insert_bulk('user', [{'nick_name': 'test'}, {'nick_name': 'test'}]))
+    
+    # 分页查询
+    print(query('test_table').page(1, 10))
 ```
