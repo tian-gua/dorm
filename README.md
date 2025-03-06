@@ -49,7 +49,7 @@ datasource:
 ```
 ### 2.CURD示例
 ```python
-from pydorm import init, dorm, dict_query, query, update, insert, insert_bulk
+from pydorm import init, dorm, dict_query, query, update, insert, insert_bulk, upsert, upsert_bulk
 
 if __name__ == '__main__':
     # 初始化
@@ -65,23 +65,32 @@ if __name__ == '__main__':
     print(record_obj.name)
 
     # 链式查询批量数据
-    print(dict_query('test_table').eq('type', 1).list())
+    dict_query('test_table').eq('type', 1).list()
 
     # 跨库查询
-    print(dict_query('test_table', 'database2').list())
+    dict_query('test_table', 'database2').list()
 
     # 删除数据，返回影响行数（这里会报错，有安全校验，不允许全量删除）
-    print(update('test_table').delete())
+    update('test_table').delete()
 
     # 更新数据，返回影响行数
-    print(update('test_table').set(name='abc', type=1).eq('id', 1).update())
+    update('test_table').set(name='abc', type=1).eq('id', 1).update()
 
     # 插入数据，返回影响行数和主键
-    print(insert('test_table', {'name': 'new_record', 'type': 2}))
+    insert('test_table', {'name': 'new_record', 'type': 2})
 
     # 批量插入
-    print(insert_bulk('user', [{'nick_name': 'test'}, {'nick_name': 'test'}]))
+    insert_bulk('user', [{'nick_name': 'test'}, {'nick_name': 'test'}])
     
     # 分页查询
-    print(query('test_table').page(1, 10))
+    query('test_table').page(1, 10)
+
+    # 插入更新（on duplicate key update）
+    upsert('test_table', {'nick_name': 'guest', 'username': 'guest'})
+    # username冲突时更新nick_name
+    upsert('test_table', {'nick_name': 'guest', 'username': 'guest'}, ['nick_name'])
+
+    # 批量插入更新
+    upsert_bulk('test_table', [{'nick_name': 'guest', 'username': 'guest'},{'nick_name': 'admin', 'username': 'admin'}])
+    upsert_bulk('test_table', [{'nick_name': 'guest', 'username': 'guest'},{'nick_name': 'admin', 'username': 'admin'}], ['nick_name'])
 ```

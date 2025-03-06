@@ -1,11 +1,11 @@
 from ._dorm import dorm
 from ._initializer import init
-from ._insert import insert, insert_bulk
+from ._insert import insert, insert_bulk, upsert, upsert_bulk
 from ._query import query, dict_query
 from ._update import update
 
 __author__ = 'melon'
-__version__ = '0.0.1'
+__version__ = '0.0.3'
 
 __all__ = [
     'init',
@@ -14,5 +14,7 @@ __all__ = [
     'update',
     'insert',
     'insert_bulk',
+    'upsert',
+    'upsert_bulk',
     'dict_query',
 ]
