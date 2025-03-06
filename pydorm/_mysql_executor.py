@@ -5,13 +5,13 @@ from pymysql.connections import Connection
 from pymysql.cursors import DictCursor
 
 
-def debug(sql, args):
-    logger.debug(f'#### sql: {sql}')
-    logger.debug(f'#### args: {args}')
+def debug(conn, sql, args):
+    logger.debug(f'[{id(conn)}] {sql}')
+    logger.debug(f'### {args}')
 
 
 def select_one(sql: str, args: tuple[Any, ...], conn: Connection) -> dict[str, Any] | None:
-    debug(sql, args)
+    debug(conn, sql, args)
 
     cursor: DictCursor = conn.cursor()
     try:
@@ -29,11 +29,10 @@ def select_one(sql: str, args: tuple[Any, ...], conn: Connection) -> dict[str, A
         raise e
     finally:
         cursor.close()
-        conn.close()
 
 
 def select_many(sql: str, args: tuple[Any, ...], conn: Connection) -> tuple[dict[str, Any], ...] | None:
-    debug(sql, args)
+    debug(conn, sql, args)
 
     cursor: DictCursor = conn.cursor()
     try:
@@ -51,11 +50,10 @@ def select_many(sql: str, args: tuple[Any, ...], conn: Connection) -> tuple[dict
         raise e
     finally:
         cursor.close()
-        conn.close()
 
 
 def execute(sql: str, args: tuple[Any, ...], conn: Connection, is_insert=False) -> (int, int):
-    debug(sql, args)
+    debug(conn, sql, args)
 
     conn.begin()
     cursor: DictCursor = conn.cursor()
@@ -72,11 +70,11 @@ def execute(sql: str, args: tuple[Any, ...], conn: Connection, is_insert=False) 
         raise e
     finally:
         cursor.close()
-        conn.close()
 
 
-def executemany(sql: str, args: list[tuple[any, ...]], conn) -> int:
-    debug(sql, args)
+def executemany(sql: str, args: list[tuple[any, ...]], conn) -> int | None:
+    debug(conn, sql, args)
+
     conn.begin()
     cursor = conn.cursor()
     try:
@@ -89,4 +87,3 @@ def executemany(sql: str, args: list[tuple[any, ...]], conn) -> int:
         raise e
     finally:
         cursor.close()
-        conn.close()

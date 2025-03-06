@@ -1,5 +1,7 @@
 from dataclasses import field, make_dataclass
 
+from loguru import logger
+
 from pydorm.protocols import IDataSource
 
 
@@ -16,7 +18,10 @@ class Models:
             conn = data_source.get_connection()
             c = conn.cursor()
             try:
-                c.execute(f'show columns from {database}.{table}')
+                sql = f'show columns from {database}.{table}'
+                logger.debug(f'[{id(conn)}] {sql}')
+
+                c.execute(sql)
                 rows = c.fetchall()
                 table_fields = []
                 for row in rows:
@@ -34,7 +39,6 @@ class Models:
             finally:
                 c.close()
                 conn.commit()
-                conn.close()
         else:
             return model
 
