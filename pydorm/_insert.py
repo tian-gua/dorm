@@ -67,15 +67,13 @@ class Insert:
     def _build_insert_bulk(self, data: list[dict]) -> tuple[str, list[tuple[any, ...]]]:
         placeholder = []
         keys = []
-        values = []
         model_fields = [f.name for f in fields(self._model)]
         for k, v in data[0].items():
             if k in model_fields:
                 keys.append(k)
-                values.append(v)
                 placeholder.append('?')
         sql = f'INSERT INTO {self._database}.{self._table} ({",".join(keys)}) VALUES ({",".join(placeholder)})'
-        args = [tuple(datum.values()) for datum in data]
+        args = [tuple(datum[k] for k in keys) for datum in data]
         return sql, args
 
     def upsert(self, data, update_fields: list[str] = None) -> (int, int):
@@ -123,9 +121,6 @@ class Insert:
         return executemany(sql, args, conn)
 
     def _build_upsert_bulk(self, data: list[dict], update_fields: list[str]) -> tuple[str, list[tuple[any, ...]]]:
-        if not data:
-            raise ValueError('data is required')
-
         placeholder = []
         keys = []
         model_fields = [f.name for f in fields(self._model)]

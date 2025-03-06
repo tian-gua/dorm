@@ -5,7 +5,7 @@ from ._query import query, dict_query
 from ._update import update
 
 __author__ = 'melon'
-__version__ = '0.0.4'
+__version__ = '0.1.0'
 
 __all__ = [
     'init',
