@@ -121,18 +121,25 @@ class DictQuery:
         conn = self._datasource.get_connection()
         return select_one(sql, args, conn)
 
-    def list(self) -> tuple[dict[str, Any], ...]:
+    def list(self) -> list[dict[str, Any]]:
         sql, args = self._build_select()
         conn = self._datasource.get_connection()
-        return select_many(sql, args, conn)
+        rows = select_many(sql, args, conn)
+        if rows is None:
+            return []
+        return rows
 
-    def page(self, page: int, page_size: int) -> tuple[tuple[dict[str, Any], ...], int]:
+    def page(self, page: int, page_size: int) -> tuple[List[dict[str, Any]], int]:
         self._limit = page_size
         self._offset = (page - 1) * page_size
         sql, args = self._build_select()
         conn = self._datasource.get_connection()
-        rows: tuple[dict[str, Any], ...] = select_many(sql, args, conn)
         count = self.count()
+        if count == 0:
+            return [], count
+        rows = select_many(sql, args, conn)
+        if rows is None:
+            return [], count
         return rows, count
 
     def count(self) -> int:
@@ -232,17 +239,21 @@ class Query(DictQuery):
         return self
 
     def one(self) -> object | None:
-        row: dict[str, Any] | None = super().one()
+        row = super().one()
         if row is None:
             return None
         return self._model(**row)
 
-    def list(self) -> List[object]:
-        rows: tuple[dict[str, Any], ...] = super().list()
+    def list(self) -> List:
+        rows = super().list()
+        if len(rows) == 0:
+            return rows
         return [self._model(**row) for row in rows]
 
-    def page(self, page: int, page_size: int) -> tuple[List[object], int]:
+    def page(self, page: int, page_size: int) -> tuple[List, int]:
         rows, count = super().page(page, page_size)
+        if len(rows) == 0:
+            return rows, count
         return [self._model(**row) for row in rows], count
 
 

@@ -14,42 +14,37 @@ def select_one(sql: str, args: tuple[Any, ...], conn: Connection) -> dict[str, A
     debug(conn, sql, args)
 
     cursor: DictCursor = conn.cursor()
-    try:
-        sql = sql.replace('?', '%s')
-        result = cursor.execute(sql, args)
-        if result is None:
-            return None
 
-        row = cursor.fetchone()
-        if row is None:
-            return None
+    sql = sql.replace('?', '%s')
+    result = cursor.execute(sql, args)
+    if result is None:
+        return None
 
-        return row
-    except Exception as e:
-        raise e
-    finally:
-        cursor.close()
+    row = cursor.fetchone()
+    if row is None:
+        return None
+
+    cursor.close()
+    return row
 
 
-def select_many(sql: str, args: tuple[Any, ...], conn: Connection) -> tuple[dict[str, Any], ...] | None:
+def select_many(sql: str, args: tuple[Any, ...], conn: Connection) -> list[dict[str, Any]] | None:
     debug(conn, sql, args)
 
     cursor: DictCursor = conn.cursor()
-    try:
-        sql = sql.replace('?', '%s')
-        result = cursor.execute(sql, args)
-        if result is None:
-            return None
 
-        rows = cursor.fetchall()
-        if rows is None:
-            return None
+    sql = sql.replace('?', '%s')
+    result = cursor.execute(sql, args)
+    if result is None:
+        return None
 
-        return rows
-    except Exception as e:
-        raise e
-    finally:
-        cursor.close()
+    rows = cursor.fetchall()
+    if rows is None:
+        return None
+
+    res = list(rows)
+    cursor.close()
+    return res
 
 
 def execute(sql: str, args: tuple[Any, ...], conn: Connection, is_insert=False) -> (int, int):
