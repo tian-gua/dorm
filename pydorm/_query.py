@@ -35,16 +35,18 @@ class DictQuery:
         self._order_by = None
         self._limit = None
         self._offset = None
+        self._distinct = False
 
         self._model: callable = models.get(data_source=self._datasource, database=self._database, table=self._table)
 
-    def select(self, *select_fields) -> 'DictQuery':
+    def select(self, *select_fields, distinct=False) -> 'DictQuery':
         if self._entity is not None:
             for field in select_fields:
                 if not hasattr(self._entity, field):
                     raise ValueError(f'table {self._table} has no field {field}')
 
         self._select_fields = select_fields
+        self._distinct = distinct
         return self
 
     def ignore(self, *ignore_fields) -> 'DictQuery':
@@ -158,7 +160,8 @@ class DictQuery:
             self._select_fields = [field.name for field in fields(self._model)]
 
         select_fields = [field for field in self._select_fields if field not in self._ignore_fields]
-        sql = f'SELECT {",".join(select_fields)} FROM {self._database}.{self._table}'
+
+        sql = f'SELECT {"DISTINCT " if self._distinct and self._select_fields else ""}{",".join(select_fields)} FROM {self._database}.{self._table}'
         args = ()
         tree = self._where.tree()
         if len(tree.conditions) > 0:

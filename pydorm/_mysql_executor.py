@@ -7,7 +7,8 @@ from pymysql.cursors import DictCursor
 
 def debug(conn, sql, args):
     logger.debug(f'[{id(conn)}] {sql}')
-    logger.debug(f'### {args}')
+    if args is not None and len(args) > 0:
+        logger.debug(f'### {args}')
 
 
 def select_one(sql: str, args: tuple[Any, ...], conn: Connection) -> dict[str, Any] | None:
