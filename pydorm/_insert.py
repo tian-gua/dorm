@@ -76,7 +76,7 @@ class Insert:
         args = [tuple(datum[k] for k in keys) for datum in data]
         return sql, args
 
-    def upsert(self, data, update_fields: list[str] = None) -> (int, int):
+    def upsert(self, data, update_fields: list[str] | None = None) -> (int, int):
         if data is None:
             raise ValueError('null data')
 
@@ -84,7 +84,7 @@ class Insert:
         conn = self._datasource.get_connection()
         return execute(sql, args, conn, True)
 
-    def _build_upsert(self, data: dict, update_fields: list[str]) -> tuple[str, tuple[Any, ...]]:
+    def _build_upsert(self, data: dict, update_fields: list[str] | None = None) -> tuple[str, tuple[Any, ...]]:
         placeholder = []
         keys = []
         values = []
@@ -100,8 +100,11 @@ class Insert:
             raise ValueError('no valid field found')
 
         # check if update_fields is a sub list of keys
-        if not all(field in keys for field in update_fields):
-            raise ValueError('update fields are not valid')
+        if update_fields is None:
+            update_fields = keys
+        else:
+            if len(update_fields) == 0 or not all(field in keys for field in update_fields):
+                raise ValueError('update fields are not valid')
 
         sql = f'INSERT INTO `{self._database}`.`{self._table}` ({",".join(keys)}) VALUES ({",".join(placeholder)})'
         if update_fields:
@@ -112,7 +115,7 @@ class Insert:
         args = tuple(values)
         return sql, args
 
-    def upsert_bulk(self, data: list[dict], update_fields: list[str]) -> int:
+    def upsert_bulk(self, data: list[dict], update_fields: list[str] | None = None) -> int:
         if data is None or len(data) == 0:
             raise ValueError('data is required')
 
@@ -120,7 +123,7 @@ class Insert:
         conn = self._datasource.get_connection()
         return executemany(sql, args, conn)
 
-    def _build_upsert_bulk(self, data: list[dict], update_fields: list[str]) -> tuple[str, list[tuple[any, ...]]]:
+    def _build_upsert_bulk(self, data: list[dict], update_fields: list[str] | None = None) -> tuple[str, list[tuple[any, ...]]]:
         placeholder = []
         keys = []
         model_fields = [f.name for f in fields(self._model)]
@@ -133,9 +136,12 @@ class Insert:
         if len(keys) == 0:
             raise ValueError('no valid field found')
 
-        # Check if update_fields is a sublist of keys
-        if not all(field in keys for field in update_fields):
-            raise ValueError('update_fields must be a sublist of keys')
+        # check if update_fields is a sub list of keys
+        if update_fields is None:
+            update_fields = keys
+        else:
+            if len(update_fields) == 0 or not all(field in keys for field in update_fields):
+                raise ValueError('update fields are not valid')
 
         sql = f'INSERT INTO `{self._database}`.`{self._table}` ({",".join(keys)}) VALUES ({",".join(placeholder)})'
         if update_fields:
