@@ -44,6 +44,11 @@ class DictQuery:
             for field in select_fields:
                 if not hasattr(self._entity, field):
                     raise ValueError(f'table {self._table} has no field {field}')
+        else:
+            model_fields = [f.name for f in fields(self._model)]
+            for select_field in select_fields:
+                if select_field not in model_fields:
+                    raise ValueError(f'invalid field [{select_field}]')
 
         self._select_fields = select_fields
         self._distinct = distinct
