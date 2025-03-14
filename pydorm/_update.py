@@ -29,7 +29,7 @@ class Update:
             raise ValueError('database is required')
 
         self._where = Where(self._entity)
-        self._update_fields = {}
+        self._update_fields: dict = {}
 
         self._model: callable = models.get(data_source=self._datasource, database=self._database, table=self._table)
 
@@ -77,11 +77,17 @@ class Update:
         self._where.or_(or_)
         return self
 
-    def set(self, **sets) -> 'Update':
-        for k, v in sets.items():
+    def set(self, set_args: dict = None, **args) -> 'Update':
+        if set_args is None:
+            set_args = {}
+
+        set_args.update(args)
+
+        for k, v in set_args.items():
             if self._entity is not None and not hasattr(self._entity, k):
                 raise ValueError(f'entity {self._entity} has no field {k}')
-        self._update_fields: dict = sets
+
+        self._update_fields = set_args
         return self
 
     def update(self) -> int:
