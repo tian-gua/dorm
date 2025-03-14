@@ -1,5 +1,7 @@
 from typing import Any
 
+from loguru import logger
+
 from ._dorm import dorm
 from ._models import models
 from ._mysql_executor import execute
@@ -83,11 +85,18 @@ class Update:
 
         set_args.update(args)
 
+        valid_fields = {}
         for k, v in set_args.items():
             if self._entity is not None and not hasattr(self._entity, k):
-                raise ValueError(f'entity {self._entity} has no field {k}')
+                # raise ValueError(f'entity {self._entity} has no field {k}')
+                logger.warning(f'table {self._table} has no column {k}')
+            else:
+                valid_fields[k] = v
 
-        self._update_fields = set_args
+        if len(valid_fields) == 0:
+            raise ValueError('update fields is required')
+
+        self._update_fields = valid_fields
         return self
 
     def update(self) -> int:
