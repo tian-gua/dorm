@@ -88,20 +88,21 @@ if __name__ == '__main__':
     update(TestTable).set(nickname='abc', type=1).eq(TestTable.id, 1).update()
 
     # 插入数据，返回影响行数和主键
-    insert(TestTable, {'name': 'new_record', 'type': 2})
+    insert(TestTable, {'nickname': 'cba', 'type': 2})
 
     # 批量插入
-    insert_bulk(TestTable, [{'nickname': 'test'}, {'nickname': 'test'}])
+    insert_bulk(TestTable, [{'nickname': 'test1'}, {'nickname': 'test2'}])
 
     # 分页查询
     query(TestTable).page(1, 10)
 
     # 插入更新（on duplicate key update）
-    upsert(TestTable, {'nickname': 'guest', 'name': 'guest'})
-    # username冲突时更新nick_name
-    upsert('test_table', {'nick_name': 'guest', 'username': 'guest'}, ['nick_name'])
+    upsert(TestTable, {'nickname': 'guest', 'username': 'guest'})
+    # 插入更新, key冲突时更新nickname
+    upsert('test_table', {'nickname': 'guest', 'username': 'guest'}, ['nickname'])
 
     # 批量插入更新
-    upsert_bulk('test_table', [{'nick_name': 'guest', 'username': 'guest'}, {'nick_name': 'admin', 'username': 'admin'}])
-    upsert_bulk('test_table', [{'nick_name': 'guest', 'username': 'guest'}, {'nick_name': 'admin', 'username': 'admin'}], ['nick_name'])
+    upsert_bulk('test_table', [{'nickname': 'guest', 'username': 'guest'}, {'nickname': 'admin', 'username': 'admin'}])
+    # 批量插入更新, key冲突时更新nickname
+    upsert_bulk('test_table', [{'nickname': 'guest', 'username': 'guest'}, {'nickname': 'admin', 'username': 'admin'}], ['nickname'])
 ```
