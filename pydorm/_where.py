@@ -1,4 +1,4 @@
-from typing import TypeVar, Type
+from typing import TypeVar
 
 from ._condition import ConditionTree, Condition
 from .enums import Operator
@@ -7,64 +7,49 @@ T = TypeVar('T')
 
 
 class Where:
-    def __init__(self, entity: T | None = None, logic='and') -> None:
+    def __init__(self, logic='and') -> None:
         self._condition_tree = ConditionTree(logic)
-        self._entity = entity
 
     def tree(self) -> ConditionTree:
         return self._condition_tree
 
-    def check_field(self, field: str):
-        if self._entity is not None and not hasattr(self._entity, field):
-            raise ValueError(f'entity {self._entity} has no field {field}')
-
     def eq(self, field: str, value: any) -> 'Where':
-        self.check_field(field)
         self._condition_tree.add_condition(Condition(field, value))
         return self
 
     def ne(self, field: str, value: any) -> 'Where':
-        self.check_field(field)
         self._condition_tree.add_condition(Condition(field, value, Operator.NE))
         return self
 
     def gt(self, field: str, value: any) -> 'Where':
-        self.check_field(field)
         self._condition_tree.add_condition(Condition(field, value, Operator.GT))
         return self
 
     def ge(self, field: str, value: any) -> 'Where':
-        self.check_field(field)
         self._condition_tree.add_condition(Condition(field, value, Operator.GE))
         return self
 
     def lt(self, field: str, value: any) -> 'Where':
-        self.check_field(field)
         self._condition_tree.add_condition(Condition(field, value, Operator.LT))
         return self
 
     def le(self, field: str, value: any) -> 'Where':
-        self.check_field(field)
         self._condition_tree.add_condition(Condition(field, value, Operator.LE))
         return self
 
     def in_(self, field: str, value: any) -> 'Where':
-        self.check_field(field)
         self._condition_tree.add_condition(Condition(field, value, Operator.IN))
         return self
 
     def l_like(self, field: str, value: any) -> 'Where':
-        self.check_field(field)
         self._condition_tree.add_condition(Condition(field, f'%{value}', Operator.LIKE))
         return self
 
     def r_like(self, field: str, value: any) -> 'Where':
-        self.check_field(field)
         self._condition_tree.add_condition(Condition(field, f'{value}%', Operator.LIKE))
         return self
 
     def like(self, field: str, value: any) -> 'Where':
-        self.check_field(field)
         self._condition_tree.add_condition(Condition(field, f'%{value}%', Operator.LIKE))
         return self
 
@@ -77,19 +62,13 @@ class Where:
 
 
 class Or(Where):
-    def __init__(self, entity: Type[T] | None = None) -> None:
-        super().__init__(entity, 'or')
+    def __init__(self) -> None:
+        super().__init__('or')
 
 
-def where(cls: Type[T] | None = None):
-    if cls is None:
-        return Where()
-    else:
-        return Where(cls())
+def where():
+    return Where()
 
 
-def or_(cls: Type[T] | None = None):
-    if cls is None:
-        return Or()
-    else:
-        return Or(cls)
+def or_():
+    return Or()

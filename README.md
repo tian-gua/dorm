@@ -49,48 +49,59 @@ datasource:
 ```
 ### 2.CURD示例
 ```python
-from pydorm import init, dorm, dict_query, query, update, insert, insert_bulk, upsert, upsert_bulk
+from pydorm import init, dorm, raw_query, query, update, insert, insert_bulk, upsert, upsert_bulk, entity
+
+
+@entity('test_table')
+class TestTable:
+    id: int | None
+    username: str | None
+    password: str | None
+    nickname: str | None
+    type: int | None
+
 
 if __name__ == '__main__':
     # 初始化
     init('./dorm.yaml')
     print(dorm.is_initialized())
 
-    # 链式查询单条数据，返回字典
-    record: dict = dict_query('test_table').eq('id', '1').one()
-    print(record['name'])
+    # 链式查询单条数据（通过字符串构建sql）
+    record: dict = raw_query('test_table').eq('id', '1').one()
+    # entity装饰器允许通过类属性来获取数据
+    print(record[TestTable.nickname])
 
-    # 链式查询单条数据，返回动态对象
-    record_obj = query('test_table').eq('id', '1').one()
+    # 链式查询单条数据（通过实体类构建sql）
+    record_obj = query(TestTable).eq(TestTable.id, 1).one()
     print(record_obj.name)
 
-    # 链式查询批量数据
-    dict_query('test_table').eq('type', 1).list()
+    # 查询批量数据
+    query(TestTable).eq(TestTable.type, 1).list()
 
     # 跨库查询
-    dict_query('test_table', 'database2').list()
+    query(TestTable, 'database2').list()
 
     # 删除数据，返回影响行数（这里会报错，有安全校验，不允许全量删除）
-    update('test_table').delete()
+    update(TestTable).delete()
 
     # 更新数据，返回影响行数
-    update('test_table').set(name='abc', type=1).eq('id', 1).update()
+    update(TestTable).set(nickname='abc', type=1).eq(TestTable.id, 1).update()
 
     # 插入数据，返回影响行数和主键
-    insert('test_table', {'name': 'new_record', 'type': 2})
+    insert(TestTable, {'name': 'new_record', 'type': 2})
 
     # 批量插入
-    insert_bulk('user', [{'nick_name': 'test'}, {'nick_name': 'test'}])
-    
+    insert_bulk(TestTable, [{'nickname': 'test'}, {'nickname': 'test'}])
+
     # 分页查询
-    query('test_table').page(1, 10)
+    query(TestTable).page(1, 10)
 
     # 插入更新（on duplicate key update）
-    upsert('test_table', {'nick_name': 'guest', 'username': 'guest'})
+    upsert(TestTable, {'nickname': 'guest', 'name': 'guest'})
     # username冲突时更新nick_name
     upsert('test_table', {'nick_name': 'guest', 'username': 'guest'}, ['nick_name'])
 
     # 批量插入更新
-    upsert_bulk('test_table', [{'nick_name': 'guest', 'username': 'guest'},{'nick_name': 'admin', 'username': 'admin'}])
-    upsert_bulk('test_table', [{'nick_name': 'guest', 'username': 'guest'},{'nick_name': 'admin', 'username': 'admin'}], ['nick_name'])
+    upsert_bulk('test_table', [{'nick_name': 'guest', 'username': 'guest'}, {'nick_name': 'admin', 'username': 'admin'}])
+    upsert_bulk('test_table', [{'nick_name': 'guest', 'username': 'guest'}, {'nick_name': 'admin', 'username': 'admin'}], ['nick_name'])
 ```

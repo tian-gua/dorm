@@ -2,8 +2,8 @@ from dataclasses import make_dataclass
 from typing import get_type_hints
 
 
-def model(table: str):
-    def _model(cls):
+def entity(table: str):
+    def _entity(cls):
         annotations = get_type_hints(cls)
         new_fields = []
         for name, typ in annotations.items():
@@ -12,6 +12,8 @@ def model(table: str):
             new_fields.append((name, typ, None))
         new_cls = make_dataclass(cls.__name__, new_fields, bases=cls.__bases__)
         new_cls.__table_name__ = table
+        for new_field in new_fields:
+            setattr(new_cls, new_field[0], new_field[0])
         return new_cls
 
-    return _model
+    return _entity

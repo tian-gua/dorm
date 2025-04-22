@@ -10,7 +10,7 @@ from .protocols import IDataSource
 T = TypeVar('T')
 
 
-class DictQuery:
+class RawQuery:
     def __init__(self, table: str, datasource: IDataSource, database: str):
         self._table = table
         self._datasource = datasource
@@ -24,6 +24,7 @@ class DictQuery:
             raise ValueError('datasource must be an instance of IDataSource')
         if self._database is None or self._database == '':
             raise ValueError('database is required')
+
         self._where = Where()
         self._select_fields = []
         self._ignore_fields = []
@@ -33,8 +34,9 @@ class DictQuery:
         self._distinct = False
 
         self._model: callable = models.get(data_source=self._datasource, database=self._database, table=self._table)
+        self._model_fields = [f.name for f in fields(self._model)]
 
-    def select(self, *select_fields, distinct=False) -> 'DictQuery':
+    def select(self, *select_fields, distinct=False) -> 'RawQuery':
         model_fields = [f.name for f in fields(self._model)]
         for select_field in select_fields:
             if select_field not in model_fields:
@@ -44,67 +46,86 @@ class DictQuery:
         self._distinct = distinct
         return self
 
-    def ignore(self, *ignore_fields) -> 'DictQuery':
+    def ignore(self, *ignore_fields) -> 'RawQuery':
+        model_fields = [f.name for f in fields(self._model)]
+        for ignore_field in ignore_fields:
+            if ignore_field not in model_fields:
+                raise ValueError(f'invalid field [{ignore_field}]')
+
         self._ignore_fields = ignore_fields
         return self
 
-    def eq(self, field: str, value: Any) -> 'DictQuery':
+    def check_field(self, field: str):
+        if field not in self._model_fields:
+            raise ValueError(f'invalid field [{field}]')
+
+    def eq(self, field: str, value: Any) -> 'RawQuery':
+        self.check_field(field)
         self._where.eq(field, value)
         return self
 
-    def ne(self, field: str, value: Any) -> 'DictQuery':
+    def ne(self, field: str, value: Any) -> 'RawQuery':
+        self.check_field(field)
         self._where.ne(field, value)
         return self
 
-    def gt(self, field: str, value: Any) -> 'DictQuery':
+    def gt(self, field: str, value: Any) -> 'RawQuery':
+        self.check_field(field)
         self._where.gt(field, value)
         return self
 
-    def ge(self, field: str, value: Any) -> 'DictQuery':
+    def ge(self, field: str, value: Any) -> 'RawQuery':
+        self.check_field(field)
         self._where.ge(field, value)
         return self
 
-    def lt(self, field: str, value: Any) -> 'DictQuery':
+    def lt(self, field: str, value: Any) -> 'RawQuery':
+        self.check_field(field)
         self._where.lt(field, value)
         return self
 
-    def le(self, field: str, value: Any) -> 'DictQuery':
+    def le(self, field: str, value: Any) -> 'RawQuery':
+        self.check_field(field)
         self._where.le(field, value)
         return self
 
-    def in_(self, field: str, value: Any) -> 'DictQuery':
+    def in_(self, field: str, value: Any) -> 'RawQuery':
+        self.check_field(field)
         self._where.in_(field, value)
         return self
 
-    def l_like(self, field: str, value: Any) -> 'DictQuery':
+    def l_like(self, field: str, value: Any) -> 'RawQuery':
+        self.check_field(field)
         self._where.l_like(field, value)
         return self
 
-    def r_like(self, field: str, value: Any) -> 'DictQuery':
+    def r_like(self, field: str, value: Any) -> 'RawQuery':
+        self.check_field(field)
         self._where.r_like(field, value)
         return self
 
-    def like(self, field: str, value: Any) -> 'DictQuery':
+    def like(self, field: str, value: Any) -> 'RawQuery':
+        self.check_field(field)
         self._where.like(field, value)
         return self
 
-    def or_(self, or_: Or) -> 'DictQuery':
+    def or_(self, or_: Or) -> 'RawQuery':
         self._where.or_(or_)
         return self
 
-    def desc(self, *order_by) -> 'DictQuery':
+    def desc(self, *order_by) -> 'RawQuery':
         self._order_by = [f'{field} desc' for field in order_by]
         return self
 
-    def asc(self, *order_by) -> 'DictQuery':
+    def asc(self, *order_by) -> 'RawQuery':
         self._order_by = [f'{field} asc' for field in order_by]
         return self
 
-    def limit(self, limit: int) -> 'DictQuery':
+    def limit(self, limit: int) -> 'RawQuery':
         self._limit = limit
         return self
 
-    def offset(self, offset: int) -> 'DictQuery':
+    def offset(self, offset: int) -> 'RawQuery':
         self._offset = offset
         return self
 
@@ -172,82 +193,63 @@ class DictQuery:
         return sql, args
 
 
-class Query(DictQuery, Generic[T]):
+class Query(RawQuery, Generic[T]):
     def __init__(self, cls: Type[T], datasource: IDataSource, database: str):
         if not hasattr(cls, '__table_name__'):
             raise ValueError('invalid model class')
         super().__init__(cls.__table_name__, datasource, database)
         self._cls = cls
-        self._entity = cls()
-
-    def select(self, *select_fields, distinct=False) -> 'DictQuery':
-        for field in select_fields:
-            if not hasattr(self._entity, field):
-                raise ValueError(f'table {self._table} has no field {field}')
-
-        self._select_fields = select_fields
-        self._distinct = distinct
-        return self
-
-    def ignore(self, *ignore_fields) -> 'DictQuery':
-        if self._entity is not None:
-            for field in ignore_fields:
-                if not hasattr(self._entity, field):
-                    raise ValueError(f'table {self._table} has no field {field}')
-
-        self._ignore_fields = ignore_fields
-        return self
 
     def eq(self, field: str, value: Any) -> 'Query':
-        self._where.eq(field, value)
+        super().eq(field, value)
         return self
 
     def ne(self, field: str, value: Any) -> 'Query':
-        self._where.ne(field, value)
+        super().ne(field, value)
         return self
 
     def gt(self, field: str, value: Any) -> 'Query':
-        self._where.gt(field, value)
+        super().gt(field, value)
         return self
 
     def ge(self, field: str, value: Any) -> 'Query':
-        self._where.ge(field, value)
+        super().ge(field, value)
         return self
 
     def lt(self, field: str, value: Any) -> 'Query':
-        self._where.lt(field, value)
+        super().lt(field, value)
         return self
 
     def le(self, field: str, value: Any) -> 'Query':
-        self._where.le(field, value)
+        super().le(field, value)
         return self
 
     def in_(self, field: str, value: Any) -> 'Query':
-        self._where.in_(field, value)
+        super().in_(field, value)
         return self
 
     def l_like(self, field: str, value: Any) -> 'Query':
-        self._where.l_like(field, value)
+        super().l_like(field, value)
         return self
 
     def r_like(self, field: str, value: Any) -> 'Query':
-        self._where.r_like(field, value)
+        super().r_like(field, value)
         return self
 
     def like(self, field: str, value: Any) -> 'Query':
-        self._where.like(field, value)
+        super().like(field, value)
         return self
 
     def or_(self, or_: Or) -> 'Query':
-        self._where.or_(or_)
+        super().or_(or_)
         return self
 
     def desc(self, *order_by) -> 'Query':
-        self._order_by = [f'{field} desc' for field in order_by]
+        super().desc(*order_by)
         return self
 
     def asc(self, *order_by) -> 'Query':
-        self._order_by = [f'{field} asc' for field in order_by]
+        super().asc(*order_by)
         return self
 
     def limit(self, limit: int) -> 'Query':
@@ -290,5 +292,5 @@ def query(cls: Type[T], database: str | None = None, data_source: IDataSource | 
     return Query(cls, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())
 
 
-def dict_query(table: str, database: str | None = None, data_source: IDataSource | None = None):
-    return DictQuery(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())
+def raw_query(table: str, database: str | None = None, data_source: IDataSource | None = None):
+    return RawQuery(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())

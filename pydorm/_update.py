@@ -1,6 +1,5 @@
+from dataclasses import fields
 from typing import Any, TypeVar, Type
-
-from loguru import logger
 
 from ._dorm import dorm
 from ._models import models
@@ -27,53 +26,67 @@ class Update:
         if self._database is None or self._database == '':
             raise ValueError('database is required')
 
-        if cls is None:
-            self._entity = None
-        else:
-            self._entity = cls()
-
-        self._where = Where(self._entity)
+        self._cls = cls
+        self._where = Where()
         self._update_fields: dict = {}
 
         self._model: callable = models.get(data_source=self._datasource, database=self._database, table=self._table)
+        self._model_fields = [f.name for f in fields(self._model)]
+
+    def check_field(self, field: str):
+        if field not in self._model_fields:
+            raise ValueError(f'invalid field [{field}]')
+
+    def has_field(self, field: str):
+        return field in self._model_fields
 
     def eq(self, field: str, value: Any) -> 'Update':
+        self.check_field(field)
         self._where.eq(field, value)
         return self
 
     def ne(self, field: str, value: Any) -> 'Update':
+        self.check_field(field)
         self._where.ne(field, value)
         return self
 
     def gt(self, field: str, value: Any) -> 'Update':
+        self.check_field(field)
         self._where.gt(field, value)
         return self
 
     def ge(self, field: str, value: Any) -> 'Update':
+        self.check_field(field)
         self._where.ge(field, value)
         return self
 
     def lt(self, field: str, value: Any) -> 'Update':
+        self.check_field(field)
         self._where.lt(field, value)
         return self
 
     def le(self, field: str, value: Any) -> 'Update':
+        self.check_field(field)
         self._where.le(field, value)
         return self
 
     def in_(self, field: str, value: Any) -> 'Update':
+        self.check_field(field)
         self._where.in_(field, value)
         return self
 
     def l_like(self, field: str, value: Any) -> 'Update':
+        self.check_field(field)
         self._where.l_like(field, value)
         return self
 
     def r_like(self, field: str, value: Any) -> 'Update':
+        self.check_field(field)
         self._where.r_like(field, value)
         return self
 
     def like(self, field: str, value: Any) -> 'Update':
+        self.check_field(field)
         self._where.like(field, value)
         return self
 
@@ -89,14 +102,11 @@ class Update:
 
         valid_fields = {}
         for k, v in set_args.items():
-            if self._entity is not None and not hasattr(self._entity, k):
-                # raise ValueError(f'entity {self._entity} has no field {k}')
-                logger.warning(f'table {self._table} has no column {k}')
-            else:
+            if self.has_field(k):
                 valid_fields[k] = v
 
         if len(valid_fields) == 0:
-            raise ValueError('update fields is required')
+            raise ValueError('valid fields is required')
 
         self._update_fields = valid_fields
         return self
@@ -146,6 +156,6 @@ def update(table_or_cls: str | Type[T], database: str | None = None, data_source
         table = table_or_cls
         cls = None
     else:
-        table = table_or_cls.__table__
+        table = table_or_cls.__table_name__
         cls = table_or_cls
     return Update(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database(), cls=cls)
