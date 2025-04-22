@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, TypeVar, Type
 
 from loguru import logger
 
@@ -6,17 +6,14 @@ from ._dorm import dorm
 from ._models import models
 from ._mysql_executor import execute
 from ._where import Where, Or
-from .protocols import IEntity, IDataSource
+from .protocols import IDataSource
+
+T = TypeVar('T')
 
 
 class Update:
-    def __init__(self, table: str | IEntity, datasource: IDataSource, database: str):
-        if isinstance(table, str):
-            self._table: str = table
-            self._entity: IEntity | None = None
-        else:
-            self._table: str = table.__table_name__
-            self._entity: IEntity | None = table
+    def __init__(self, table: str, datasource: IDataSource, database: str, cls: Type[T] | None):
+        self._table: str = table
 
         self._datasource = datasource
         self._database = database
@@ -29,6 +26,11 @@ class Update:
             raise ValueError('datasource must be an instance of IDataSource')
         if self._database is None or self._database == '':
             raise ValueError('database is required')
+
+        if cls is None:
+            self._entity = None
+        else:
+            self._entity = cls()
 
         self._where = Where(self._entity)
         self._update_fields: dict = {}
@@ -139,5 +141,11 @@ class Update:
         return sql, args
 
 
-def update(table: str | IEntity, database: str | None = None, data_source: IDataSource | None = None) -> Update:
-    return Update(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())
+def update(table_or_cls: str | Type[T], database: str | None = None, data_source: IDataSource | None = None) -> Update:
+    if isinstance(table_or_cls, str):
+        table = table_or_cls
+        cls = None
+    else:
+        table = table_or_cls.__table__
+        cls = table_or_cls
+    return Update(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database(), cls=cls)

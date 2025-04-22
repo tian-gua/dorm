@@ -1,12 +1,15 @@
+from typing import TypeVar, Type
+
 from ._condition import ConditionTree, Condition
 from .enums import Operator
-from .protocols import IEntity
+
+T = TypeVar('T')
 
 
 class Where:
-    def __init__(self, entity: IEntity | None = None, logic='and') -> None:
+    def __init__(self, entity: T | None = None, logic='and') -> None:
         self._condition_tree = ConditionTree(logic)
-        self._entity: IEntity = entity
+        self._entity = entity
 
     def tree(self) -> ConditionTree:
         return self._condition_tree
@@ -74,13 +77,19 @@ class Where:
 
 
 class Or(Where):
-    def __init__(self, entity: IEntity | None = None) -> None:
+    def __init__(self, entity: Type[T] | None = None) -> None:
         super().__init__(entity, 'or')
 
 
-def where(entity: IEntity | None = None):
-    return Where(entity)
+def where(cls: Type[T] | None = None):
+    if cls is None:
+        return Where()
+    else:
+        return Where(cls())
 
 
-def or_(entity: IEntity | None = None):
-    return Or(entity)
+def or_(cls: Type[T] | None = None):
+    if cls is None:
+        return Or()
+    else:
+        return Or(cls)

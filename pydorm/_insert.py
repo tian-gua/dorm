@@ -1,21 +1,17 @@
 from dataclasses import fields
-from typing import Any
+from typing import Any, TypeVar, Type
 
 from ._dorm import dorm
 from ._models import models
 from ._mysql_executor import execute, executemany
-from .protocols import IEntity, IDataSource
+from .protocols import IDataSource
+
+T = TypeVar('T')
 
 
 class Insert:
-    def __init__(self, table: str | IEntity, datasource: IDataSource, database: str):
-        if isinstance(table, str):
-            self._table: str = table
-            self._entity: IEntity | None = None
-        else:
-            self._table: str = table.__table_name__
-            self._entity: IEntity | None = table
-
+    def __init__(self, table: str, datasource: IDataSource, database: str):
+        self._table: str = table
         self._datasource = datasource
         self._database = database
 
@@ -153,21 +149,37 @@ class Insert:
         return sql, args
 
 
-def insert(table: str | IEntity, data: dict = None, database: str | None = None, data_source: IDataSource | None = None) -> (int, int):
+def insert(table_or_cls: str | Type[T], data: dict = None, database: str | None = None, data_source: IDataSource | None = None) -> (int, int):
+    if isinstance(table_or_cls, str):
+        table = table_or_cls
+    else:
+        table = table_or_cls.__table_name__
     return Insert(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database()).insert(data)
 
 
-def upsert(table: str | IEntity, data: dict = None, update_fields: list = None, database: str | None = None,
+def upsert(table_or_cls: str | Type[T], data: dict = None, update_fields: list = None, database: str | None = None,
            data_source: IDataSource | None = None) -> (int, int):
+    if isinstance(table_or_cls, str):
+        table = table_or_cls
+    else:
+        table = table_or_cls.__table_name__
     return (Insert(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())
             .upsert(data, update_fields))
 
 
-def insert_bulk(table: str | IEntity, data: list[dict] = None, database: str | None = None, data_source: IDataSource | None = None):
+def insert_bulk(table_or_cls: str | Type[T], data: list[dict] = None, database: str | None = None, data_source: IDataSource | None = None):
+    if isinstance(table_or_cls, str):
+        table = table_or_cls
+    else:
+        table = table_or_cls.__table_name__
     return Insert(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database()).insert_bulk(data)
 
 
-def upsert_bulk(table: str | IEntity, data: list[dict] = None, update_fields: list = None, database: str | None = None,
+def upsert_bulk(table_or_cls: str | Type[T], data: list[dict] = None, update_fields: list = None, database: str | None = None,
                 data_source: IDataSource | None = None):
+    if isinstance(table_or_cls, str):
+        table = table_or_cls
+    else:
+        table = table_or_cls.__table_name__
     return (Insert(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())
             .upsert_bulk(data, update_fields))

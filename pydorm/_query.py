@@ -1,22 +1,18 @@
 from dataclasses import fields
-from typing import List, Any
+from typing import List, Any, TypeVar, Type, Generic
 
 from ._dorm import dorm
 from ._models import models
 from ._mysql_executor import select_one, select_many
 from ._where import Where, Or
-from .protocols import IEntity, IDataSource
+from .protocols import IDataSource
+
+T = TypeVar('T')
 
 
 class DictQuery:
-    def __init__(self, table: str | IEntity, datasource: IDataSource, database: str):
-        if isinstance(table, str):
-            self._table: str = table
-            self._entity: IEntity | None = None
-        else:
-            self._table: str = table.__table_name__
-            self._entity: IEntity | None = table
-
+    def __init__(self, table: str, datasource: IDataSource, database: str):
+        self._table = table
         self._datasource = datasource
         self._database = database
 
@@ -28,8 +24,7 @@ class DictQuery:
             raise ValueError('datasource must be an instance of IDataSource')
         if self._database is None or self._database == '':
             raise ValueError('database is required')
-
-        self._where = Where(self._entity)
+        self._where = Where()
         self._select_fields = []
         self._ignore_fields = []
         self._order_by = None
@@ -40,26 +35,16 @@ class DictQuery:
         self._model: callable = models.get(data_source=self._datasource, database=self._database, table=self._table)
 
     def select(self, *select_fields, distinct=False) -> 'DictQuery':
-        if self._entity is not None:
-            for field in select_fields:
-                if not hasattr(self._entity, field):
-                    raise ValueError(f'table {self._table} has no field {field}')
-        else:
-            model_fields = [f.name for f in fields(self._model)]
-            for select_field in select_fields:
-                if select_field not in model_fields:
-                    raise ValueError(f'invalid field [{select_field}]')
+        model_fields = [f.name for f in fields(self._model)]
+        for select_field in select_fields:
+            if select_field not in model_fields:
+                raise ValueError(f'invalid field [{select_field}]')
 
         self._select_fields = select_fields
         self._distinct = distinct
         return self
 
     def ignore(self, *ignore_fields) -> 'DictQuery':
-        if self._entity is not None:
-            for field in ignore_fields:
-                if not hasattr(self._entity, field):
-                    raise ValueError(f'table {self._table} has no field {field}')
-
         self._ignore_fields = ignore_fields
         return self
 
@@ -124,11 +109,17 @@ class DictQuery:
         return self
 
     def one(self) -> dict[str, Any] | None:
+        if len(self._select_fields) == 0:
+            self._select_fields = [f.name for f in fields(self._model)]
+
         sql, args = self._build_select()
         conn = self._datasource.get_connection()
         return select_one(sql, args, conn)
 
     def list(self) -> list[dict[str, Any]]:
+        if len(self._select_fields) == 0:
+            self._select_fields = [f.name for f in fields(self._model)]
+
         sql, args = self._build_select()
         conn = self._datasource.get_connection()
         rows = select_many(sql, args, conn)
@@ -137,6 +128,9 @@ class DictQuery:
         return rows
 
     def page(self, page: int, page_size: int) -> tuple[List[dict[str, Any]], int]:
+        if len(self._select_fields) == 0:
+            self._select_fields = [f.name for f in fields(self._model)]
+
         self._limit = page_size
         self._offset = (page - 1) * page_size
         sql, args = self._build_select()
@@ -160,10 +154,6 @@ class DictQuery:
         return select_one(sql, args, conn)['COUNT(*)']
 
     def _build_select(self) -> tuple[str, tuple[Any, ...]]:
-        # select_fields exclude ignore_fields
-        if not self._select_fields:
-            self._select_fields = [field.name for field in fields(self._model)]
-
         select_fields = [field for field in self._select_fields if field not in self._ignore_fields]
 
         sql = f'SELECT {"DISTINCT " if self._distinct and self._select_fields else ""}{",".join(select_fields)} FROM {self._database}.{self._table}'
@@ -182,9 +172,31 @@ class DictQuery:
         return sql, args
 
 
-class Query(DictQuery):
-    def __init__(self, table: str | IEntity, datasource: IDataSource, database: str):
-        super().__init__(table, datasource, database)
+class Query(DictQuery, Generic[T]):
+    def __init__(self, cls: Type[T], datasource: IDataSource, database: str):
+        if not hasattr(cls, '__table_name__'):
+            raise ValueError('invalid model class')
+        super().__init__(cls.__table_name__, datasource, database)
+        self._cls = cls
+        self._entity = cls()
+
+    def select(self, *select_fields, distinct=False) -> 'DictQuery':
+        for field in select_fields:
+            if not hasattr(self._entity, field):
+                raise ValueError(f'table {self._table} has no field {field}')
+
+        self._select_fields = select_fields
+        self._distinct = distinct
+        return self
+
+    def ignore(self, *ignore_fields) -> 'DictQuery':
+        if self._entity is not None:
+            for field in ignore_fields:
+                if not hasattr(self._entity, field):
+                    raise ValueError(f'table {self._table} has no field {field}')
+
+        self._ignore_fields = ignore_fields
+        return self
 
     def eq(self, field: str, value: Any) -> 'Query':
         self._where.eq(field, value)
@@ -246,28 +258,37 @@ class Query(DictQuery):
         self._offset = offset
         return self
 
-    def one(self) -> object | None:
+    def one(self) -> T | None:
+        if len(self._select_fields) == 0:
+            self._select_fields = [f.name for f in fields(self._cls)]
+
         row = super().one()
         if row is None:
             return None
-        return self._model(**row)
+        return self._cls(**row)
 
-    def list(self) -> List:
+    def list(self) -> List[T]:
+        if len(self._select_fields) == 0:
+            self._select_fields = [f.name for f in fields(self._cls)]
+
         rows = super().list()
         if len(rows) == 0:
             return rows
-        return [self._model(**row) for row in rows]
+        return [self._cls(**row) for row in rows]
 
     def page(self, page: int, page_size: int) -> tuple[List, int]:
+        if len(self._select_fields) == 0:
+            self._select_fields = [f.name for f in fields(self._cls)]
+
         rows, count = super().page(page, page_size)
         if len(rows) == 0:
             return rows, count
-        return [self._model(**row) for row in rows], count
+        return [self._cls(**row) for row in rows], count
 
 
-def query(table: str | IEntity, database: str | None = None, data_source: IDataSource | None = None):
-    return Query(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())
+def query(cls: Type[T], database: str | None = None, data_source: IDataSource | None = None):
+    return Query(cls, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())
 
 
-def dict_query(table: str | IEntity, database: str | None = None, data_source: IDataSource | None = None):
+def dict_query(table: str, database: str | None = None, data_source: IDataSource | None = None):
     return DictQuery(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())
