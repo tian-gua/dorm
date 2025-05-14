@@ -23,11 +23,15 @@ class DormContext:
         self._conn.commit()
         logger.debug(f'commit transaction: {self._tx_id}')
         self._conn.close()
+        self._tx_id = None
+        self._conn = None
 
     def rollback(self):
         self._conn.rollback()
         logger.debug(f'rollback transaction: {self._tx_id}')
         self._conn.close()
+        self._tx_id = None
+        self._conn = None
 
     def tx(self):
         return self._conn

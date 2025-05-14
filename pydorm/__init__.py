@@ -3,10 +3,11 @@ from ._entity import entity, vo
 from ._initializer import init
 from ._insert import insert, insert_bulk, upsert, upsert_bulk
 from ._query import query, raw_query
+from ._transaction import begin, commit, rollback
 from ._update import update
 
 __author__ = 'melon'
-__version__ = '0.4.0'
+__version__ = '0.5.0'
 
 __all__ = [
     'init',
@@ -19,5 +20,8 @@ __all__ = [
     'upsert_bulk',
     'raw_query',
     'entity',
-    'vo'
+    'vo',
+    'begin',
+    'commit',
+    'rollback',
 ]

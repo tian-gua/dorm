@@ -15,7 +15,7 @@ class Models:
         key = f'{data_source_id}.{database}.{table}'
         model = self._model_dict.get(key, None)
         if model is None:
-            conn = data_source.get_connection()
+            conn = data_source.get_connection(False)
             c = conn.cursor()
             try:
                 sql = f'show columns from {database}.{table}'

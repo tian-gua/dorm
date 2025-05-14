@@ -21,5 +21,5 @@ class IDataSource(Protocol):
     def get_default_database(self) -> str:
         ...
 
-    def get_connection(self):
+    def get_connection(self, reuse: bool = True):
         ...

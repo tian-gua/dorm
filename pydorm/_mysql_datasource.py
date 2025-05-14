@@ -36,15 +36,21 @@ class MysqlDataSource:
     def get_default_database(self) -> str:
         return self._default_database
 
-    def get_connection(self):
-        if self._conn is None:
-            return self._create_connection()
+    def get_connection(self, reuse: bool = True):
+        if reuse:
+            if self._conn is None:
+                conn = self._create_connection()
+                self._conn = conn
+                self._conn_create_time = time.time()
+                return conn
 
-        # ping every 60 seconds and reconnect if necessary
-        if time.time() - self._conn_create_time > 60:
-            self._conn.ping(True)
-            self._conn_create_time = time.time()
-        return self._conn
+            # ping every 60 seconds and reconnect if necessary
+            if time.time() - self._conn_create_time > 60:
+                self._conn.ping(True)
+                self._conn_create_time = time.time()
+            return self._conn
+        else:
+            return self._create_connection()
 
     def _create_connection(self):
         conn = pymysql.connect(host=self._host,
@@ -54,7 +60,4 @@ class MysqlDataSource:
                                database=self._default_database,
                                cursorclass=DictCursor)
         logger.info(f'create connection [{id(conn)}]')
-
-        self._conn = conn
-        self._conn_create_time = time.time()
-        return self._conn
+        return conn

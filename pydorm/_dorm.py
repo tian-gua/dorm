@@ -51,11 +51,5 @@ class Dorm:
                 return ds
         return None
 
-    def begin(self):
-        raise NotImplementedError()
-
-    def commit(self):
-        raise NotImplementedError()
-
 
 dorm = Dorm()

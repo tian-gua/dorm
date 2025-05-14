@@ -1,6 +1,7 @@
 from dataclasses import fields
 from typing import Any, TypeVar, Type
 
+from ._context import dorm_context
 from ._dorm import dorm
 from ._models import models
 from ._mysql_executor import execute, executemany
@@ -31,8 +32,12 @@ class Insert:
             raise ValueError('null data')
 
         sql, args = self._build_insert(data)
-        conn = self._datasource.get_connection()
-        return execute(sql, args, conn, True)
+        conn = dorm_context.get().tx()
+        if conn is None:
+            conn = self._datasource.get_connection()
+            return execute(sql, args, conn, True)
+        else:
+            return execute(sql, args, conn, True, False)
 
     def _build_insert(self, data: dict) -> tuple[str, tuple[Any, ...]]:
         placeholder = []
@@ -57,8 +62,12 @@ class Insert:
             raise ValueError('data is required')
 
         sql, args = self._build_insert_bulk(data)
-        conn = self._datasource.get_connection()
-        return executemany(sql, args, conn)
+        conn = dorm_context.get().tx()
+        if conn is None:
+            conn = self._datasource.get_connection()
+            return executemany(sql, args, conn)
+        else:
+            return executemany(sql, args, conn, False)
 
     def _build_insert_bulk(self, data: list[dict]) -> tuple[str, list[tuple[any, ...]]]:
         placeholder = []
@@ -77,8 +86,12 @@ class Insert:
             raise ValueError('null data')
 
         sql, args = self._build_upsert(data, update_fields)
-        conn = self._datasource.get_connection()
-        return execute(sql, args, conn, True)
+        conn = dorm_context.get().tx()
+        if conn is None:
+            conn = self._datasource.get_connection()
+            return execute(sql, args, conn, True)
+        else:
+            return execute(sql, args, conn, True, False)
 
     def _build_upsert(self, data: dict, update_fields: list[str] | None = None) -> tuple[str, tuple[Any, ...]]:
         placeholder = []
@@ -116,8 +129,12 @@ class Insert:
             raise ValueError('data is required')
 
         sql, args = self._build_upsert_bulk(data, update_fields)
-        conn = self._datasource.get_connection()
-        return executemany(sql, args, conn)
+        conn = dorm_context.get().tx()
+        if conn is None:
+            conn = self._datasource.get_connection()
+            return executemany(sql, args, conn)
+        else:
+            return executemany(sql, args, conn, False)
 
     def _build_upsert_bulk(self, data: list[dict], update_fields: list[str] | None = None) -> tuple[str, list[tuple[any, ...]]]:
         placeholder = []

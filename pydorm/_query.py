@@ -1,6 +1,7 @@
 from dataclasses import fields
 from typing import List, Any, TypeVar, Type, Generic
 
+from ._context import dorm_context
 from ._dorm import dorm
 from ._models import models
 from ._mysql_executor import select_one, select_many
@@ -134,16 +135,24 @@ class RawQuery:
             self._select_fields = [f.name for f in fields(self._model)]
 
         sql, args = self._build_select()
-        conn = self._datasource.get_connection()
-        return select_one(sql, args, conn)
+        conn = dorm_context.get().tx()
+        if conn is None:
+            conn = self._datasource.get_connection()
+            return select_one(sql, args, conn)
+        else:
+            return select_one(sql, args, conn, False)
 
     def list(self) -> list[dict[str, Any]]:
         if len(self._select_fields) == 0:
             self._select_fields = [f.name for f in fields(self._model)]
 
         sql, args = self._build_select()
-        conn = self._datasource.get_connection()
-        rows = select_many(sql, args, conn)
+        conn = dorm_context.get().tx()
+        if conn is None:
+            conn = self._datasource.get_connection()
+            rows = select_many(sql, args, conn)
+        else:
+            rows = select_many(sql, args, conn, False)
         if rows is None:
             return []
         return rows
@@ -155,11 +164,17 @@ class RawQuery:
         self._limit = page_size
         self._offset = (page - 1) * page_size
         sql, args = self._build_select()
-        conn = self._datasource.get_connection()
+
         count = self.count()
         if count == 0:
             return [], count
-        rows = select_many(sql, args, conn)
+
+        conn = dorm_context.get().tx()
+        if conn is None:
+            conn = self._datasource.get_connection()
+            rows = select_many(sql, args, conn)
+        else:
+            rows = select_many(sql, args, conn, False)
         if rows is None:
             return [], count
         return rows, count
@@ -171,8 +186,13 @@ class RawQuery:
         if len(tree.conditions) > 0:
             exp, args = tree.parse()
             sql += ' WHERE ' + exp
-        conn = self._datasource.get_connection()
-        return select_one(sql, args, conn)['COUNT(*)']
+
+        conn = dorm_context.get().tx()
+        if conn is None:
+            conn = self._datasource.get_connection()
+            return select_one(sql, args, conn)['COUNT(*)']
+        else:
+            return select_one(sql, args, conn, False)['COUNT(*)']
 
     def _build_select(self) -> tuple[str, tuple[Any, ...]]:
         select_fields = [field for field in self._select_fields if field not in self._ignore_fields]
