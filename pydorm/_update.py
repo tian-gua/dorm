@@ -124,9 +124,9 @@ class Update:
         conn = dorm_context.get().tx()
         if conn is None:
             conn = self._datasource.get_connection()
-            affected, last_row_id = execute(sql, args, conn, False, False)
-        else:
             affected, last_row_id = execute(sql, args, conn, False)
+        else:
+            affected, last_row_id = execute(sql, args, conn, False, False)
         return affected or 0
 
     def _build_update(self) -> tuple[str, tuple[Any, ...]]:
