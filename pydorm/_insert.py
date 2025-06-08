@@ -166,11 +166,18 @@ class Insert:
         return sql, args
 
 
-def insert(table_or_cls: str | Type[T], data: dict = None, database: str | None = None, data_source: IDataSource | None = None) -> (int, int):
+def insert(table_or_cls: str | Type[T], data: dict | T = None, database: str | None = None, data_source: IDataSource | None = None) -> (int, int):
     if isinstance(table_or_cls, str):
         table = table_or_cls
     else:
         table = table_or_cls.__table_name__
+
+    # 判断 data 是否为dict，如果不是，则转换成dict
+    if data is not None and not isinstance(data, dict):
+        data = data.__dict__ if hasattr(data, '__dict__') else data.__dict__
+    # 移除 value 为 None 的字段
+    data = {k: v for k, v in data.items() if v is not None}
+
     return Insert(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database()).insert(data)
 
 
