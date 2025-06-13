@@ -2,10 +2,12 @@ from dataclasses import fields
 from typing import List, Any, TypeVar, Type, Generic
 
 from ._context import dorm_context
-from ._dorm import dorm
+from ._datasources import default_datasource
+from ._middlewares import get_middlewares
 from ._models import models
 from ._mysql_executor import select_one, select_many
 from ._where import Where, Or
+from .enums import Middleware
 from .protocols import IDataSource
 
 T = TypeVar('T')
@@ -134,6 +136,8 @@ class RawQuery:
         if len(self._select_fields) == 0:
             self._select_fields = [f.name for f in fields(self._model)]
 
+        self._apply_before_query_middlewares()
+
         sql, args = self._build_select()
         conn = dorm_context.get().tx()
         if conn is None:
@@ -145,6 +149,8 @@ class RawQuery:
     def list(self) -> list[dict[str, Any]]:
         if len(self._select_fields) == 0:
             self._select_fields = [f.name for f in fields(self._model)]
+
+        self._apply_before_query_middlewares()
 
         sql, args = self._build_select()
         conn = dorm_context.get().tx()
@@ -161,11 +167,13 @@ class RawQuery:
         if len(self._select_fields) == 0:
             self._select_fields = [f.name for f in fields(self._model)]
 
+        self._apply_before_query_middlewares()
+
         self._limit = page_size
         self._offset = (page - 1) * page_size
-        sql, args = self._build_select()
 
-        count = self.count()
+        sql, args = self._build_select()
+        count = self._count()
         if count == 0:
             return [], count
 
@@ -179,7 +187,7 @@ class RawQuery:
             return [], count
         return rows, count
 
-    def count(self) -> int:
+    def _count(self) -> int:
         sql = f'SELECT COUNT(*) FROM {self._database}.{self._table}'
         args = ()
         tree = self._where.tree()
@@ -193,6 +201,10 @@ class RawQuery:
             return select_one(sql, args, conn)['COUNT(*)']
         else:
             return select_one(sql, args, conn, False)['COUNT(*)']
+
+    def count(self) -> int:
+        self._apply_before_query_middlewares()
+        return self._count()
 
     def _build_select(self) -> tuple[str, tuple[Any, ...]]:
         select_fields = [field for field in self._select_fields if field not in self._ignore_fields]
@@ -211,6 +223,14 @@ class RawQuery:
             sql += f' OFFSET {self._offset}'
 
         return sql, args
+
+    def _apply_before_query_middlewares(self):
+        middlewares = get_middlewares(Middleware.BEFORE_QUERY)
+        if middlewares is None or len(middlewares) == 0:
+            return
+        for middleware in middlewares:
+            if callable(middleware):
+                middleware(self)
 
 
 class Query(RawQuery, Generic[T]):
@@ -309,8 +329,8 @@ class Query(RawQuery, Generic[T]):
 
 
 def query(cls: Type[T], database: str | None = None, data_source: IDataSource | None = None):
-    return Query(cls, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())
+    return Query(cls, data_source or default_datasource(), database or default_datasource().get_default_database())
 
 
 def raw_query(table: str, database: str | None = None, data_source: IDataSource | None = None):
-    return RawQuery(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database())
+    return RawQuery(table, data_source or default_datasource(), database or default_datasource().get_default_database())

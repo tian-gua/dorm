@@ -177,3 +177,5 @@ build.sh
 /dorm.egg-info
 
 **/__pycache__/
+
+dorm_test.py

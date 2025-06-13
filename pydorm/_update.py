@@ -2,10 +2,12 @@ from dataclasses import fields
 from typing import Any, TypeVar, Type
 
 from ._context import dorm_context
-from ._dorm import dorm
+from ._datasources import default_datasource
+from ._middlewares import get_middlewares
 from ._models import models
 from ._mysql_executor import execute
 from ._where import Where, Or
+from .enums import Middleware
 from .protocols import IDataSource
 
 T = TypeVar('T')
@@ -159,6 +161,13 @@ class Update:
         sql += ' WHERE ' + exp
         return sql, args
 
+    def _apply_before_update_middlewares(self):
+        middlewares = get_middlewares(Middleware.BEFORE_UPDATE)
+        if middlewares is None or len(middlewares) == 0:
+            return
+        for middleware in middlewares:
+            middleware(self)
+
 
 def update(table_or_cls: str | Type[T], database: str | None = None, data_source: IDataSource | None = None) -> Update:
     if isinstance(table_or_cls, str):
@@ -167,4 +176,4 @@ def update(table_or_cls: str | Type[T], database: str | None = None, data_source
     else:
         table = table_or_cls.__table_name__
         cls = table_or_cls
-    return Update(table, data_source or dorm.default_datasource(), database or dorm.default_datasource().get_default_database(), cls=cls)
+    return Update(table, data_source or default_datasource(), database or default_datasource().get_default_database(), cls=cls)
