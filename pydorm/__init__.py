@@ -8,7 +8,7 @@ from ._transaction import begin, commit, rollback
 from ._update import update, Update
 
 __author__ = 'melon'
-__version__ = '0.6.0'
+__version__ = '0.6.1'
 
 __all__ = [
     'init',
