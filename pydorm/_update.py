@@ -1,103 +1,94 @@
 from dataclasses import fields
 from typing import Any, TypeVar, Type
 
-from ._context import dorm_context
-from ._datasources import default_datasource
 from ._middlewares import get_middlewares
 from ._models import models
 from ._mysql_executor import execute
 from ._where import Where, Or
 from .enums import Middleware
-from .protocols import IDataSource
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class Update:
-    def __init__(self, table: str, datasource: IDataSource, database: str, cls: Type[T] | None):
+    def __init__(self, table: str, database: str | None, ds_id: str):
         self._table: str = table
-
-        self._datasource = datasource
         self._database = database
+        self._ds_id = ds_id
 
-        if self._table is None or self._table == '':
-            raise ValueError('table is required')
-        if self._datasource is None or self._datasource == '':
-            raise ValueError('datasource is required')
-        if not isinstance(self._datasource, IDataSource):
-            raise ValueError('datasource must be an instance of IDataSource')
-        if self._database is None or self._database == '':
-            raise ValueError('database is required')
+        if self._table is None or self._table == "":
+            raise ValueError("table is required")
 
-        self._cls = cls
         self._where = Where()
         self._update_fields: dict = {}
 
-        self._model: callable = models.get(data_source=self._datasource, database=self._database, table=self._table)
+        self._model: callable = models.get(
+            ds_id=self._ds_id, database=self._database, table=self._table
+        )
         self._model_fields = [f.name for f in fields(self._model)]
 
     def check_field(self, field: str):
         if field not in self._model_fields:
-            raise ValueError(f'invalid field [{field}]')
+            raise ValueError(f"invalid field [{field}]")
 
     def has_field(self, field: str):
         return field in self._model_fields
 
-    def eq(self, field: str, value: Any) -> 'Update':
+    def eq(self, field: str, value: Any) -> "Update":
         self.check_field(field)
         self._where.eq(field, value)
         return self
 
-    def ne(self, field: str, value: Any) -> 'Update':
+    def ne(self, field: str, value: Any) -> "Update":
         self.check_field(field)
         self._where.ne(field, value)
         return self
 
-    def gt(self, field: str, value: Any) -> 'Update':
+    def gt(self, field: str, value: Any) -> "Update":
         self.check_field(field)
         self._where.gt(field, value)
         return self
 
-    def ge(self, field: str, value: Any) -> 'Update':
+    def ge(self, field: str, value: Any) -> "Update":
         self.check_field(field)
         self._where.ge(field, value)
         return self
 
-    def lt(self, field: str, value: Any) -> 'Update':
+    def lt(self, field: str, value: Any) -> "Update":
         self.check_field(field)
         self._where.lt(field, value)
         return self
 
-    def le(self, field: str, value: Any) -> 'Update':
+    def le(self, field: str, value: Any) -> "Update":
         self.check_field(field)
         self._where.le(field, value)
         return self
 
-    def in_(self, field: str, value: Any) -> 'Update':
+    def in_(self, field: str, value: Any) -> "Update":
         self.check_field(field)
         self._where.in_(field, value)
         return self
 
-    def l_like(self, field: str, value: Any) -> 'Update':
+    def l_like(self, field: str, value: Any) -> "Update":
         self.check_field(field)
         self._where.l_like(field, value)
         return self
 
-    def r_like(self, field: str, value: Any) -> 'Update':
+    def r_like(self, field: str, value: Any) -> "Update":
         self.check_field(field)
         self._where.r_like(field, value)
         return self
 
-    def like(self, field: str, value: Any) -> 'Update':
+    def like(self, field: str, value: Any) -> "Update":
         self.check_field(field)
         self._where.like(field, value)
         return self
 
-    def or_(self, or_: Or) -> 'Update':
+    def or_(self, or_: Or) -> "Update":
         self._where.or_(or_)
         return self
 
-    def set(self, set_args: dict = None, **args) -> 'Update':
+    def set(self, set_args: dict = None, **args) -> "Update":
         if set_args is None:
             set_args = {}
 
@@ -109,7 +100,7 @@ class Update:
                 valid_fields[k] = v
 
         if len(valid_fields) == 0:
-            raise ValueError('valid fields is required')
+            raise ValueError("valid fields is required")
 
         self._update_fields = valid_fields
         return self
@@ -117,48 +108,46 @@ class Update:
     def update(self) -> int:
         if self._where.count() == 0:
             # danger operation
-            raise ValueError('update all is not supported')
+            raise ValueError("update all is not supported")
 
         if len(self._update_fields) == 0:
-            raise ValueError('update fields is required')
+            raise ValueError("update fields is required")
 
         sql, args = self._build_update()
-        conn = dorm_context.get().tx()
-        if conn is None:
-            conn = self._datasource.get_connection()
-            affected, last_row_id = execute(sql, args, conn, False)
-        else:
-            affected, last_row_id = execute(sql, args, conn, False, False)
+
+        affected, last_row_id = execute(self._ds_id, sql, args)
         return affected or 0
 
     def _build_update(self) -> tuple[str, tuple[Any, ...]]:
-        sql = f'UPDATE {self._database}.{self._table} SET {",".join([f"{k}=?" for k in self._update_fields.keys()])}'
+        table = (
+            self._table if self._database is None else f"{self._database}.{self._table}"
+        )
+        sql = f'UPDATE {table} SET {",".join([f"{k}=?" for k in self._update_fields.keys()])}'
         args = tuple(self._update_fields.values())
 
         exp, args2 = self._where.tree().parse()
-        sql += ' WHERE ' + exp
+        sql += " WHERE " + exp
         args += args2
         return sql, args
 
     def delete(self) -> int:
         if self._where.count() == 0:
             # danger operation
-            raise ValueError('delete all is not supported')
+            raise ValueError("delete all is not supported")
 
         sql, args = self._build_delete()
-        conn = dorm_context.get().tx()
-        if conn is None:
-            conn = self._datasource.get_connection()
-            affected, last_row_id = execute(sql, args, conn, False)
-        else:
-            affected, last_row_id = execute(sql, args, conn, False, False)
+
+        affected, last_row_id = execute(self._ds_id, sql, args)
         return affected or 0
 
     def _build_delete(self) -> tuple[str, tuple[Any, ...]]:
-        sql = f'DELETE FROM {self._database}.{self._table}'
+        table = (
+            self._table if self._database is None else f"{self._database}.{self._table}"
+        )
+        sql = f"DELETE FROM {table}"
 
         exp, args = self._where.tree().parse()
-        sql += ' WHERE ' + exp
+        sql += " WHERE " + exp
         return sql, args
 
     def _apply_before_update_middlewares(self):
@@ -169,11 +158,11 @@ class Update:
             middleware(self)
 
 
-def update(table_or_cls: str | Type[T], database: str | None = None, data_source: IDataSource | None = None) -> Update:
+def update(
+    table_or_cls: str | Type[T], database: str | None = None, ds_id: str = "default"
+) -> Update:
     if isinstance(table_or_cls, str):
         table = table_or_cls
-        cls = None
     else:
         table = table_or_cls.__table_name__
-        cls = table_or_cls
-    return Update(table, data_source or default_datasource(), database or default_datasource().get_default_database(), cls=cls)
+    return Update(table, database, ds_id)

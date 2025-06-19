@@ -1,33 +1,24 @@
 from dataclasses import fields
 from typing import List, Any, TypeVar, Type, Generic
 
-from ._context import dorm_context
-from ._datasources import default_datasource
 from ._middlewares import get_middlewares
 from ._models import models
 from ._mysql_executor import select_one, select_many
 from ._where import Where, Or
 from .enums import Middleware
-from .protocols import IDataSource
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class RawQuery:
-    def __init__(self, table: str, datasource: IDataSource, database: str):
+    def __init__(self, table: str, database: str | None, ds_id: str):
         self._table = table
-        self._datasource = datasource
         self._database = database
 
-        if self._table is None or self._table == '':
-            raise ValueError('table is required')
-        if self._datasource is None or self._datasource == '':
-            raise ValueError('datasource is required')
-        if not isinstance(self._datasource, IDataSource):
-            raise ValueError('datasource must be an instance of IDataSource')
-        if self._database is None or self._database == '':
-            raise ValueError('database is required')
+        if self._table is None or self._table == "":
+            raise ValueError("table is required")
 
+        self._ds_id = ds_id
         self._where = Where()
         self._select_fields = []
         self._ignore_fields = []
@@ -36,99 +27,101 @@ class RawQuery:
         self._offset = None
         self._distinct = False
 
-        self._model: callable = models.get(data_source=self._datasource, database=self._database, table=self._table)
+        self._model: callable = models.get(
+            ds_id=self._ds_id, database=self._database, table=self._table
+        )
         self._model_fields = [f.name for f in fields(self._model)]
 
-    def select(self, *select_fields, distinct=False) -> 'RawQuery':
+    def select(self, *select_fields, distinct=False) -> "RawQuery":
         model_fields = [f.name for f in fields(self._model)]
         for select_field in select_fields:
             if select_field not in model_fields:
-                raise ValueError(f'invalid field [{select_field}]')
+                raise ValueError(f"invalid field [{select_field}]")
 
         self._select_fields = select_fields
         self._distinct = distinct
         return self
 
-    def ignore(self, *ignore_fields) -> 'RawQuery':
+    def ignore(self, *ignore_fields) -> "RawQuery":
         model_fields = [f.name for f in fields(self._model)]
         for ignore_field in ignore_fields:
             if ignore_field not in model_fields:
-                raise ValueError(f'invalid field [{ignore_field}]')
+                raise ValueError(f"invalid field [{ignore_field}]")
 
         self._ignore_fields = ignore_fields
         return self
 
     def check_field(self, field: str):
         if field not in self._model_fields:
-            raise ValueError(f'invalid field [{field}]')
+            raise ValueError(f"invalid field [{field}]")
 
-    def eq(self, field: str, value: Any) -> 'RawQuery':
+    def eq(self, field: str, value: Any) -> "RawQuery":
         self.check_field(field)
         self._where.eq(field, value)
         return self
 
-    def ne(self, field: str, value: Any) -> 'RawQuery':
+    def ne(self, field: str, value: Any) -> "RawQuery":
         self.check_field(field)
         self._where.ne(field, value)
         return self
 
-    def gt(self, field: str, value: Any) -> 'RawQuery':
+    def gt(self, field: str, value: Any) -> "RawQuery":
         self.check_field(field)
         self._where.gt(field, value)
         return self
 
-    def ge(self, field: str, value: Any) -> 'RawQuery':
+    def ge(self, field: str, value: Any) -> "RawQuery":
         self.check_field(field)
         self._where.ge(field, value)
         return self
 
-    def lt(self, field: str, value: Any) -> 'RawQuery':
+    def lt(self, field: str, value: Any) -> "RawQuery":
         self.check_field(field)
         self._where.lt(field, value)
         return self
 
-    def le(self, field: str, value: Any) -> 'RawQuery':
+    def le(self, field: str, value: Any) -> "RawQuery":
         self.check_field(field)
         self._where.le(field, value)
         return self
 
-    def in_(self, field: str, value: Any) -> 'RawQuery':
+    def in_(self, field: str, value: Any) -> "RawQuery":
         self.check_field(field)
         self._where.in_(field, value)
         return self
 
-    def l_like(self, field: str, value: Any) -> 'RawQuery':
+    def l_like(self, field: str, value: Any) -> "RawQuery":
         self.check_field(field)
         self._where.l_like(field, value)
         return self
 
-    def r_like(self, field: str, value: Any) -> 'RawQuery':
+    def r_like(self, field: str, value: Any) -> "RawQuery":
         self.check_field(field)
         self._where.r_like(field, value)
         return self
 
-    def like(self, field: str, value: Any) -> 'RawQuery':
+    def like(self, field: str, value: Any) -> "RawQuery":
         self.check_field(field)
         self._where.like(field, value)
         return self
 
-    def or_(self, or_: Or) -> 'RawQuery':
+    def or_(self, or_: Or) -> "RawQuery":
         self._where.or_(or_)
         return self
 
-    def desc(self, *order_by) -> 'RawQuery':
-        self._order_by = [f'{field} desc' for field in order_by]
+    def desc(self, *order_by) -> "RawQuery":
+        self._order_by = [f"{field} desc" for field in order_by]
         return self
 
-    def asc(self, *order_by) -> 'RawQuery':
-        self._order_by = [f'{field} asc' for field in order_by]
+    def asc(self, *order_by) -> "RawQuery":
+        self._order_by = [f"{field} asc" for field in order_by]
         return self
 
-    def limit(self, limit: int) -> 'RawQuery':
+    def limit(self, limit: int) -> "RawQuery":
         self._limit = limit
         return self
 
-    def offset(self, offset: int) -> 'RawQuery':
+    def offset(self, offset: int) -> "RawQuery":
         self._offset = offset
         return self
 
@@ -139,12 +132,8 @@ class RawQuery:
         self._apply_before_query_middlewares()
 
         sql, args = self._build_select()
-        conn = dorm_context.get().tx()
-        if conn is None:
-            conn = self._datasource.get_connection()
-            return select_one(sql, args, conn)
-        else:
-            return select_one(sql, args, conn, False)
+
+        return select_one(self._ds_id, sql, args)
 
     def list(self) -> list[dict[str, Any]]:
         if len(self._select_fields) == 0:
@@ -153,12 +142,8 @@ class RawQuery:
         self._apply_before_query_middlewares()
 
         sql, args = self._build_select()
-        conn = dorm_context.get().tx()
-        if conn is None:
-            conn = self._datasource.get_connection()
-            rows = select_many(sql, args, conn)
-        else:
-            rows = select_many(sql, args, conn, False)
+
+        rows = select_many(self._ds_id, sql, args)
         if rows is None:
             return []
         return rows
@@ -177,50 +162,48 @@ class RawQuery:
         if count == 0:
             return [], count
 
-        conn = dorm_context.get().tx()
-        if conn is None:
-            conn = self._datasource.get_connection()
-            rows = select_many(sql, args, conn)
-        else:
-            rows = select_many(sql, args, conn, False)
+        rows = select_many(self._ds_id, sql, args)
         if rows is None:
             return [], count
         return rows, count
 
     def _count(self) -> int:
-        sql = f'SELECT COUNT(*) FROM {self._database}.{self._table}'
+        table = (
+            self._table if self._database is None else f"{self._database}.{self._table}"
+        )
+        sql = f"SELECT COUNT(*) FROM {table}"
         args = ()
         tree = self._where.tree()
         if len(tree.conditions) > 0:
             exp, args = tree.parse()
-            sql += ' WHERE ' + exp
+            sql += " WHERE " + exp
 
-        conn = dorm_context.get().tx()
-        if conn is None:
-            conn = self._datasource.get_connection()
-            return select_one(sql, args, conn)['COUNT(*)']
-        else:
-            return select_one(sql, args, conn, False)['COUNT(*)']
+        return select_one(self._ds_id, sql, args)["COUNT(*)"]
 
     def count(self) -> int:
         self._apply_before_query_middlewares()
         return self._count()
 
     def _build_select(self) -> tuple[str, tuple[Any, ...]]:
-        select_fields = [field for field in self._select_fields if field not in self._ignore_fields]
+        select_fields = [
+            field for field in self._select_fields if field not in self._ignore_fields
+        ]
 
-        sql = f'SELECT {"DISTINCT " if self._distinct and self._select_fields else ""}{",".join(select_fields)} FROM {self._database}.{self._table}'
+        table = (
+            self._table if self._database is None else f"{self._database}.{self._table}"
+        )
+        sql = f'SELECT {"DISTINCT " if self._distinct and self._select_fields else ""}{",".join(select_fields)} FROM {table}'
         args = ()
         tree = self._where.tree()
         if len(tree.conditions) > 0:
             exp, args = tree.parse()
-            sql += ' WHERE ' + exp
+            sql += " WHERE " + exp
         if self._order_by is not None:
             sql += f' ORDER BY {",".join(self._order_by)}'
         if self._limit is not None:
-            sql += f' LIMIT {self._limit}'
+            sql += f" LIMIT {self._limit}"
         if self._offset is not None:
-            sql += f' OFFSET {self._offset}'
+            sql += f" OFFSET {self._offset}"
 
         return sql, args
 
@@ -234,69 +217,69 @@ class RawQuery:
 
 
 class Query(RawQuery, Generic[T]):
-    def __init__(self, cls: Type[T], datasource: IDataSource, database: str):
-        if not hasattr(cls, '__table_name__'):
-            raise ValueError('invalid model class')
-        super().__init__(cls.__table_name__, datasource, database)
+    def __init__(self, cls: Type[T], database: str | None, ds_id: str):
+        if not hasattr(cls, "__table_name__"):
+            raise ValueError("invalid model class")
+        super().__init__(cls.__table_name__, database, ds_id)
         self._cls = cls
 
-    def eq(self, field: str, value: Any) -> 'Query':
+    def eq(self, field: str, value: Any) -> "Query":
         super().eq(field, value)
         return self
 
-    def ne(self, field: str, value: Any) -> 'Query':
+    def ne(self, field: str, value: Any) -> "Query":
         super().ne(field, value)
         return self
 
-    def gt(self, field: str, value: Any) -> 'Query':
+    def gt(self, field: str, value: Any) -> "Query":
         super().gt(field, value)
         return self
 
-    def ge(self, field: str, value: Any) -> 'Query':
+    def ge(self, field: str, value: Any) -> "Query":
         super().ge(field, value)
         return self
 
-    def lt(self, field: str, value: Any) -> 'Query':
+    def lt(self, field: str, value: Any) -> "Query":
         super().lt(field, value)
         return self
 
-    def le(self, field: str, value: Any) -> 'Query':
+    def le(self, field: str, value: Any) -> "Query":
         super().le(field, value)
         return self
 
-    def in_(self, field: str, value: Any) -> 'Query':
+    def in_(self, field: str, value: Any) -> "Query":
         super().in_(field, value)
         return self
 
-    def l_like(self, field: str, value: Any) -> 'Query':
+    def l_like(self, field: str, value: Any) -> "Query":
         super().l_like(field, value)
         return self
 
-    def r_like(self, field: str, value: Any) -> 'Query':
+    def r_like(self, field: str, value: Any) -> "Query":
         super().r_like(field, value)
         return self
 
-    def like(self, field: str, value: Any) -> 'Query':
+    def like(self, field: str, value: Any) -> "Query":
         super().like(field, value)
         return self
 
-    def or_(self, or_: Or) -> 'Query':
+    def or_(self, or_: Or) -> "Query":
         super().or_(or_)
         return self
 
-    def desc(self, *order_by) -> 'Query':
+    def desc(self, *order_by) -> "Query":
         super().desc(*order_by)
         return self
 
-    def asc(self, *order_by) -> 'Query':
+    def asc(self, *order_by) -> "Query":
         super().asc(*order_by)
         return self
 
-    def limit(self, limit: int) -> 'Query':
+    def limit(self, limit: int) -> "Query":
         self._limit = limit
         return self
 
-    def offset(self, offset: int) -> 'Query':
+    def offset(self, offset: int) -> "Query":
         self._offset = offset
         return self
 
@@ -328,9 +311,9 @@ class Query(RawQuery, Generic[T]):
         return [self._cls(**row) for row in rows], count
 
 
-def query(cls: Type[T], database: str | None = None, data_source: IDataSource | None = None):
-    return Query(cls, data_source or default_datasource(), database or default_datasource().get_default_database())
+def query(cls: Type[T], database: str | None = None, ds_id: str = "default"):
+    return Query(cls, database, ds_id)
 
 
-def raw_query(table: str, database: str | None = None, data_source: IDataSource | None = None):
-    return RawQuery(table, data_source or default_datasource(), database or default_datasource().get_default_database())
+def raw_query(table: str, database: str | None = None, ds_id: str = "default"):
+    return RawQuery(table, database, ds_id)

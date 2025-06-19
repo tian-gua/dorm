@@ -8,11 +8,11 @@ class Condition:
         self.operator: Operator = operator
 
     def parse(self):
-        return f'{self.field} {self.operator.value} ?', self.value
+        return f"{self.field} {self.operator.value} ?", self.value
 
 
 class ConditionTree:
-    def __init__(self, logic='and'):
+    def __init__(self, logic="and"):
         self.conditions = []
         self.logic = logic
 
@@ -35,10 +35,10 @@ class ConditionTree:
         for condition in self.conditions:
             if isinstance(condition, ConditionTree):
                 exp, arg = condition.parse()
-                exps.append(f'({exp})')
+                exps.append(f"({exp})")
                 args.extend(arg)
             else:
                 exp, arg = condition.parse()
                 exps.append(exp)
                 args.append(arg)
-        return f' {self.logic} '.join(exps), tuple(args)
+        return f" {self.logic} ".join(exps), tuple(args)

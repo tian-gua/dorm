@@ -1,48 +1,57 @@
 from typing import Any
 
 from loguru import logger
-from pymysql.connections import Connection
 from pymysql.cursors import DictCursor
+
+from ._tx import Tx
+from ._tx import tx_context
 
 
 def debug(conn, sql, args):
-    logger.debug(f'[{id(conn)}] {sql}')
+    logger.debug(f"[{id(conn)}] {sql}")
     if args is not None and len(args) > 0:
-        logger.debug(f'### {args}')
+        logger.debug(f"### {args}")
 
 
-def select_one(sql: str, args: tuple[Any, ...], conn: Connection, is_default_transaction=True) -> dict[str, Any] | None:
+def select_one(ds_id: str, sql: str, args: tuple[Any, ...]) -> dict[str, Any] | None:
+    tx = _get_tx(ds_id)
+    conn = tx.begin()
+    cursor: DictCursor | None = None
     debug(conn, sql, args)
-
-    if is_default_transaction:
-        conn.begin()
-    cursor: DictCursor = conn.cursor()
     try:
-        sql = sql.replace('?', '%s')
+        conn.begin()
+        cursor = conn.cursor()
+        sql = sql.replace("?", "%s")
         result = cursor.execute(sql, args)
         if result is None:
             return None
 
         row = cursor.fetchone()
-        if is_default_transaction:
+        if tx.is_auto_commit():
             conn.commit()
         return row
     except Exception as e:
-        if is_default_transaction:
+        if tx.is_auto_commit():
             conn.rollback()
         raise e
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
+        if tx.is_auto_commit():
+            conn.close()
 
 
-def select_many(sql: str, args: tuple[Any, ...], conn: Connection, is_default_transaction=True) -> list[dict[str, Any]] | None:
+def select_many(
+    ds_id: str, sql: str, args: tuple[Any, ...]
+) -> list[dict[str, Any]] | None:
+    tx = _get_tx(ds_id)
+    conn = tx.begin()
+    cursor: DictCursor | None = None
     debug(conn, sql, args)
-
-    if is_default_transaction:
-        conn.begin()
-    cursor: DictCursor = conn.cursor()
     try:
-        sql = sql.replace('?', '%s')
+        conn.begin()
+        cursor = conn.cursor()
+        sql = sql.replace("?", "%s")
         result = cursor.execute(sql, args)
         if result is None:
             return None
@@ -52,55 +61,73 @@ def select_many(sql: str, args: tuple[Any, ...], conn: Connection, is_default_tr
             return []
 
         row_list = list(rows)
-        if is_default_transaction:
+        if tx.is_auto_commit():
             conn.commit()
         return row_list
     except Exception as e:
-        if is_default_transaction:
+        if tx.is_auto_commit():
             conn.rollback()
         raise e
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
+        if tx.is_auto_commit():
+            conn.close()
 
 
-def execute(sql: str, args: tuple[Any, ...], conn: Connection, is_insert=False, is_default_transaction=True) -> (int, int):
+def execute(ds_id: str, sql: str, args: tuple[Any, ...]) -> (int, int):
+    tx = _get_tx(ds_id)
+    conn = tx.begin()
+    cursor: DictCursor | None = None
     debug(conn, sql, args)
 
-    if is_default_transaction:
-        conn.begin()
-    cursor: DictCursor = conn.cursor()
     try:
-        sql = sql.replace('?', '%s')
+        conn.begin()
+        cursor = conn.cursor()
+        sql = sql.replace("?", "%s")
         row_affected = cursor.execute(sql, args)
-        last_row_id = 0
-        if is_insert:
-            last_row_id = cursor.lastrowid
-        if is_default_transaction:
+        last_row_id = cursor.lastrowid
+        if tx.is_auto_commit():
             conn.commit()
         return row_affected, last_row_id
     except Exception as e:
-        if is_default_transaction:
+        if tx.is_auto_commit():
             conn.rollback()
         raise e
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
+        if tx.is_auto_commit():
+            conn.close()
 
 
-def executemany(sql: str, args: list[tuple[any, ...]], conn: Connection, is_default_transaction=True) -> int | None:
+def executemany(ds_id: str, sql: str, args: list[tuple[any, ...]]) -> int | None:
+    tx = _get_tx(ds_id)
+    conn = tx.begin()
+    cursor: DictCursor | None = None
     debug(conn, sql, args)
 
-    if is_default_transaction:
-        conn.begin()
-    cursor = conn.cursor()
     try:
-        sql = sql.replace('?', '%s')
+        conn.begin()
+        cursor = conn.cursor()
+        sql = sql.replace("?", "%s")
         row_affected = cursor.executemany(sql, args)
-        if is_default_transaction:
+        if tx.is_auto_commit():
             conn.commit()
         return row_affected
     except Exception as e:
-        if is_default_transaction:
+        if tx.is_auto_commit():
             conn.rollback()
         raise e
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
+        if tx.is_auto_commit():
+            conn.close()
+
+
+def _get_tx(ds_id: str) -> Tx:
+    tx = tx_context.get()
+    if tx is None or not tx.is_valid() or ds_id != tx.ds_id():
+        tx = Tx(ds_id, auto_commit=True)
+    return tx

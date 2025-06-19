@@ -8,7 +8,7 @@ def entity(table: str):
         new_fields = []
 
         for name, typ in annotations.items():
-            if name.startswith('__'):
+            if name.startswith("__"):
                 continue
             # 将所有字段默认值设为 None，类型设为 Optional[原类型]
             new_fields.append((name, Optional[typ], field(default=None)))
@@ -29,7 +29,7 @@ def vo(cls):
     new_fields = []
 
     for name, typ in annotations.items():
-        if name.startswith('__'):
+        if name.startswith("__"):
             continue
         # 将所有字段默认值设为 None，类型设为 Optional[原类型]
         new_fields.append((name, Optional[typ], field(default=None)))
