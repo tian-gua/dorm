@@ -6,6 +6,7 @@ from ._insert import insert, Insert
 from ._middlewares import use_middleware
 from ._models import models
 from ._query import query, raw_query, Query, RawQuery
+from ._raw import raw_select
 from ._update import update, Update
 
 __author__ = "melon"
@@ -27,4 +28,5 @@ __all__ = [
     "use_middleware",
     "add_datasource",
     "models",
+    "raw_select",
 ]

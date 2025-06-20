@@ -189,7 +189,7 @@ def insert(
     table_or_cls: str | Type[T],
     database: str | None = None,
     ds_id: str = "default",
-) -> (int, int):
+) -> Insert:
     if isinstance(table_or_cls, str):
         table = table_or_cls
     else:
