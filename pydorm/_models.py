@@ -13,11 +13,12 @@ class Models:
     def get_structure(
         self, ds_id: str, database: str | None, table: str
     ) -> list["TableField"]:
-        self.get(ds_id, database, table)
-
         ds = get_datasource(ds_id)
         if database is None:
             database = ds.get_default_database()
+
+        self.get(ds_id, database, table)
+
         key = f"{ds_id}.{database}.{table}"
         return self._table_structure_dict.get(key, None)
 
@@ -25,41 +26,58 @@ class Models:
         ds = get_datasource(ds_id)
         if database is None:
             database = ds.get_default_database()
+
         key = f"{ds_id}.{database}.{table}"
         model = self._model_dict.get(key, None)
         if model is None:
-            conn = ds.create_connection()
-            c = conn.cursor()
-            try:
-                sql = f"show full columns from {database}.{table}"
-                logger.debug(f"[{id(conn)}] {sql}")
-
-                c.execute(sql)
-                rows = c.fetchall()
-                table_fields = []
-                for row in rows:
-                    table_field = TableField(
-                        field_=row["Field"],
-                        type_=row["Type"],
-                        null_=row["Null"],
-                        key_=row["Key"],
-                        default_=row["Default"],
-                        extra=row["Extra"],
-                        comment=row.get("Comment", ""),
-                    )
-                    table_fields.append(table_field)
-                self._table_structure_dict[key] = table_fields
-                fields = [
-                    (table_field.field_, any, field(default=None))
-                    for table_field in table_fields
-                ]
-                self._model_dict[key] = make_dataclass(key, fields=fields)
-                return self._model_dict[key]
-            finally:
-                c.close()
-                conn.commit()
+            return self._load_structure(ds_id, database, table)
         else:
             return model
+
+    def remove(self, ds_id: str, database: str | None, table: str) -> None:
+        ds = get_datasource(ds_id)
+        if database is None:
+            database = ds.get_default_database()
+
+        key = f"{ds_id}.{database}.{table}"
+        if key in self._model_dict:
+            del self._model_dict[key]
+        if key in self._table_structure_dict:
+            del self._table_structure_dict[key]
+
+    def _load_structure(self, ds_id: str, database: str | None, table: str):
+        ds = get_datasource(ds_id)
+        conn = ds.create_connection()
+        c = conn.cursor()
+        key = f"{ds_id}.{database}.{table}"
+        try:
+            sql = f"show full columns from {database}.{table}"
+            logger.debug(f"[{id(conn)}] {sql}")
+
+            c.execute(sql)
+            rows = c.fetchall()
+            table_fields = []
+            for row in rows:
+                table_field = TableField(
+                    field_=row["Field"],
+                    type_=row["Type"],
+                    null_=row["Null"],
+                    key_=row["Key"],
+                    default_=row["Default"],
+                    extra=row["Extra"],
+                    comment=row.get("Comment", ""),
+                )
+                table_fields.append(table_field)
+            self._table_structure_dict[key] = table_fields
+            fields = [
+                (table_field.field_, any, field(default=None))
+                for table_field in table_fields
+            ]
+            self._model_dict[key] = make_dataclass(key, fields=fields)
+            return self._model_dict[key]
+        finally:
+            c.close()
+            conn.commit()
 
 
 class TableField:
