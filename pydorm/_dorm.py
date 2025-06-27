@@ -19,7 +19,7 @@ class Dorm:
         logger.info("dorm initialized")
 
     # noinspection PyMethodMayBeStatic
-    def begin(self, ds_id: str | None = None):
+    def begin(self, ds_id: str = "default"):
         tx = tx_context.get()
         if tx is not None and tx.is_valid():
             raise RuntimeError("Transaction already started")

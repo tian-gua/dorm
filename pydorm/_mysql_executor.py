@@ -19,7 +19,6 @@ def select_one(ds_id: str, sql: str, args: tuple[Any, ...]) -> dict[str, Any] | 
     cursor: DictCursor | None = None
     debug(conn, sql, args)
     try:
-        conn.begin()
         cursor = conn.cursor()
         sql = sql.replace("?", "%s")
         result = cursor.execute(sql, args)
@@ -49,7 +48,6 @@ def select_many(
     cursor: DictCursor | None = None
     debug(conn, sql, args)
     try:
-        conn.begin()
         cursor = conn.cursor()
         sql = sql.replace("?", "%s")
         result = cursor.execute(sql, args)
@@ -82,7 +80,6 @@ def execute(ds_id: str, sql: str, args: tuple[Any, ...]) -> (int, int):
     debug(conn, sql, args)
 
     try:
-        conn.begin()
         cursor = conn.cursor()
         sql = sql.replace("?", "%s")
         row_affected = cursor.execute(sql, args)
@@ -108,7 +105,6 @@ def executemany(ds_id: str, sql: str, args: list[tuple[any, ...]]) -> int | None
     debug(conn, sql, args)
 
     try:
-        conn.begin()
         cursor = conn.cursor()
         sql = sql.replace("?", "%s")
         row_affected = cursor.executemany(sql, args)

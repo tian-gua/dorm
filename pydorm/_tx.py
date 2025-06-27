@@ -27,6 +27,7 @@ class Tx:
             if self._conn is not None:
                 raise RuntimeError("Transaction already started")
             self._conn = self._datasource.create_connection()
+            self._conn.begin()
             self._state = "begin"
         elif self._state == "begin" and not self._auto_commit:
             logger.debug(f"reuse existing transaction [{self._tx_id}]")

@@ -10,7 +10,7 @@ from ._raw import raw_select
 from ._update import update, Update
 
 __author__ = "melon"
-__version__ = "0.7.1"
+__version__ = "0.7.2"
 
 __all__ = [
     "init",
