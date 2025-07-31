@@ -37,7 +37,7 @@ def select_one(ds_id: str, sql: str, args: tuple[Any, ...]) -> dict[str, Any] | 
         if cursor is not None:
             cursor.close()
         if tx.is_auto_commit():
-            conn.close()
+            tx.release()
 
 
 def select_many(
@@ -70,7 +70,7 @@ def select_many(
         if cursor is not None:
             cursor.close()
         if tx.is_auto_commit():
-            conn.close()
+            tx.release()
 
 
 def execute(ds_id: str, sql: str, args: tuple[Any, ...]) -> (int, int):
@@ -95,7 +95,7 @@ def execute(ds_id: str, sql: str, args: tuple[Any, ...]) -> (int, int):
         if cursor is not None:
             cursor.close()
         if tx.is_auto_commit():
-            conn.close()
+            tx.release()
 
 
 def executemany(ds_id: str, sql: str, args: list[tuple[any, ...]]) -> int | None:
@@ -119,7 +119,7 @@ def executemany(ds_id: str, sql: str, args: list[tuple[any, ...]]) -> int | None
         if cursor is not None:
             cursor.close()
         if tx.is_auto_commit():
-            conn.close()
+            tx.release()
 
 
 def _get_tx(ds_id: str) -> Tx:

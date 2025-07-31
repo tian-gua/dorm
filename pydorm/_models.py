@@ -1,7 +1,6 @@
 from dataclasses import field, make_dataclass
-
 from loguru import logger
-
+from pymysql.connections import Connection
 from ._datasources import get_datasource
 
 
@@ -47,15 +46,16 @@ class Models:
 
     def _load_structure(self, ds_id: str, database: str | None, table: str):
         ds = get_datasource(ds_id)
-        conn = ds.create_connection()
-        c = conn.cursor()
+        reusable_conn: Connection = ds.get_reusable_connection()
+        reusable_conn.begin()
+        cursor = reusable_conn.cursor()
         key = f"{ds_id}.{database}.{table}"
         try:
             sql = f"show full columns from {database}.{table}"
-            logger.debug(f"[{id(conn)}] {sql}")
+            logger.debug(f"[{id(reusable_conn)}] {sql}")
 
-            c.execute(sql)
-            rows = c.fetchall()
+            cursor.execute(sql)
+            rows = cursor.fetchall()
             table_fields = []
             for row in rows:
                 table_field = TableField(
@@ -76,8 +76,9 @@ class Models:
             self._model_dict[key] = make_dataclass(key, fields=fields)
             return self._model_dict[key]
         finally:
-            c.close()
-            conn.commit()
+            cursor.close()
+            reusable_conn.commit()
+            ds.release_reusable_connection()
 
 
 class TableField:

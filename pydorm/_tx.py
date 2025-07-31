@@ -26,7 +26,8 @@ class Tx:
         if self._state == "new":
             if self._conn is not None:
                 raise RuntimeError("Transaction already started")
-            self._conn = self._datasource.create_connection()
+            # self._conn = self._datasource.create_connection()
+            self._conn = self._datasource.get_reusable_connection()
             self._conn.begin()
             self._state = "begin"
         elif self._state == "begin" and not self._auto_commit:
@@ -43,7 +44,8 @@ class Tx:
         self._conn.commit()
         logger.debug(f"Transaction [{self._tx_id}] committed")
         self._state = "committed"
-        self._conn.close()
+        # self._conn.close()
+        self._datasource.release_reusable_connection()
 
     def rollback(self):
         if self._state != "begin":
@@ -53,7 +55,15 @@ class Tx:
         self._conn.rollback()
         logger.debug(f"Transaction [{self._tx_id}] rolled back")
         self._state = "rolled_back"
-        self._conn.close()
+        # self._conn.close()
+        self._datasource.release_reusable_connection()
+
+    def release(self):
+        if self._state != "begin":
+            raise RuntimeError("Transaction not in a valid state to commit")
+        if self._conn is None:
+            raise RuntimeError("No connection to commit")
+        self._datasource.release_reusable_connection()
 
     def is_auto_commit(self) -> bool:
         return self._auto_commit
