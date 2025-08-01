@@ -17,11 +17,15 @@ class MysqlDataSource:
         self._user = user
         self._password = password
         self._default_database = database
-        self._reusable_connection = self.create_connection()
+        self._reusable_connection = None
         self._reusable_connection_lock = threading.RLock()
+        self._active = False
 
+    def active(self):
         # 创建一个新线程调用连接池的 keep_alive 方法
+        self._reusable_connection = self.create_connection()
         threading.Thread(target=self.keep_alive, daemon=True).start()
+        self._active = True
 
     def get_id(self) -> str:
         return self._ds_id
@@ -38,42 +42,40 @@ class MysqlDataSource:
             database=self._default_database,
             cursorclass=DictCursor,
         )
-        logger.info(f"create connection [{id(conn)}]")
+        logger.info(f"[{self._ds_id}] create connection [{id(conn)}]")
         return conn
 
     def get_reusable_connection(self) -> Connection:
+        if not self._active:
+            self.active()
+
         self._reusable_connection_lock.acquire()
-        logger.info(f"get reusable connection [{id(self._reusable_connection)}]")
+        # logger.info(f"[{self._ds_id}] get reusable connection [{id(self._reusable_connection)}]")
         return self._reusable_connection
 
     def release_reusable_connection(self):
-        if self._reusable_connection_lock.acquire():
-            self._reusable_connection_lock.release()
-            logger.info(
-                f"Released reusable connection [{id(self._reusable_connection)}]"
-            )
-        else:
-            logger.error(
-                f"Reusable connection [{id(self._reusable_connection)}] lock is not acquired, cannot release connection."
-            )
+        self._reusable_connection_lock.release()
+        # logger.info(
+        #     f"[{self._ds_id}] Released reusable connection [{id(self._reusable_connection)}]"
+        # )
 
     def keep_alive(self):
         while True:
             with self._reusable_connection_lock:
-                logger.info(
-                    f"Keep alive for connection[{id(self._reusable_connection)}]"
+                logger.debug(
+                    f"[{self._ds_id}] Keep alive for connection[{id(self._reusable_connection)}]"
                 )
                 try:
                     self._reusable_connection.ping()
                 except MySQLError:
                     try:
                         logger.error(
-                            f"Connection[{id(self._reusable_connection)}] ping failed, recreating connection."
+                            f"[{self._ds_id}] Connection[{id(self._reusable_connection)}] ping failed, recreating connection."
                         )
                         self._reusable_connection = self.create_connection()
                     finally:
                         logger.error(
-                            f"Connection[{id(self._reusable_connection)}] closed due to error."
+                            f"[{self._ds_id}] Connection[{id(self._reusable_connection)}] closed due to error."
                         )
                         self._reusable_connection = self.create_connection()
             sleep(30)
