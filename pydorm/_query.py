@@ -2,23 +2,27 @@ from dataclasses import fields
 from typing import List, Any, TypeVar, Type, Generic
 
 from ._middlewares import get_middlewares
-from ._models import models
-from ._mysql_executor import select_one, select_many
 from ._where import Where, Or
 from .enums import Middleware
+from .mysql import MysqlDataSource, ReusableMysqlConnection
 
 T = TypeVar("T")
 
 
-class RawQuery:
-    def __init__(self, table: str, database: str | None, ds_id: str):
+class DictQuery:
+    def __init__(
+        self,
+        table: str,
+        database: str | None,
+        data_source: MysqlDataSource,
+    ):
         self._table = table
         self._database = database
 
         if self._table is None or self._table == "":
             raise ValueError("table is required")
 
-        self._ds_id = ds_id
+        self._data_source = data_source
         self._where = Where()
         self._select_fields = []
         self._ignore_fields = []
@@ -27,130 +31,150 @@ class RawQuery:
         self._offset = None
         self._distinct = False
 
-        self._model: callable = models.get(
-            ds_id=self._ds_id, database=self._database, table=self._table
-        )
-        self._model_fields = [f.name for f in fields(self._model)]
+        self._model = data_source.get_model(self._database, self._table)
+        self._model_field_names = [f.name for f in fields(self._model)]  # type: ignore
 
-    def select(self, *select_fields, distinct=False) -> "RawQuery":
-        model_fields = [f.name for f in fields(self._model)]
+    def select(self, *select_fields, distinct=False) -> "DictQuery":
         for select_field in select_fields:
-            if select_field not in model_fields:
+            if select_field not in self._model_field_names:
                 raise ValueError(f"invalid field [{select_field}]")
 
         self._select_fields = select_fields
         self._distinct = distinct
         return self
 
-    def ignore(self, *ignore_fields) -> "RawQuery":
-        model_fields = [f.name for f in fields(self._model)]
+    def ignore(self, *ignore_fields) -> "DictQuery":
+
         for ignore_field in ignore_fields:
-            if ignore_field not in model_fields:
+            if ignore_field not in self._model_field_names:
                 raise ValueError(f"invalid field [{ignore_field}]")
 
         self._ignore_fields = ignore_fields
         return self
 
     def check_field(self, field: str):
-        if field not in self._model_fields:
+        if field not in self._model_field_names:
             raise ValueError(f"invalid field [{field}]")
 
-    def eq(self, field: str, value: Any) -> "RawQuery":
+    def eq(self, field: str, value: Any) -> "DictQuery":
         self.check_field(field)
         self._where.eq(field, value)
         return self
 
-    def ne(self, field: str, value: Any) -> "RawQuery":
+    def ne(self, field: str, value: Any) -> "DictQuery":
         self.check_field(field)
         self._where.ne(field, value)
         return self
 
-    def gt(self, field: str, value: Any) -> "RawQuery":
+    def gt(self, field: str, value: Any) -> "DictQuery":
         self.check_field(field)
         self._where.gt(field, value)
         return self
 
-    def ge(self, field: str, value: Any) -> "RawQuery":
+    def ge(self, field: str, value: Any) -> "DictQuery":
         self.check_field(field)
         self._where.ge(field, value)
         return self
 
-    def lt(self, field: str, value: Any) -> "RawQuery":
+    def lt(self, field: str, value: Any) -> "DictQuery":
         self.check_field(field)
         self._where.lt(field, value)
         return self
 
-    def le(self, field: str, value: Any) -> "RawQuery":
+    def le(self, field: str, value: Any) -> "DictQuery":
         self.check_field(field)
         self._where.le(field, value)
         return self
 
-    def in_(self, field: str, value: Any) -> "RawQuery":
+    def in_(self, field: str, value: Any) -> "DictQuery":
         self.check_field(field)
         self._where.in_(field, value)
         return self
 
-    def l_like(self, field: str, value: Any) -> "RawQuery":
+    def l_like(self, field: str, value: Any) -> "DictQuery":
         self.check_field(field)
         self._where.l_like(field, value)
         return self
 
-    def r_like(self, field: str, value: Any) -> "RawQuery":
+    def r_like(self, field: str, value: Any) -> "DictQuery":
         self.check_field(field)
         self._where.r_like(field, value)
         return self
 
-    def like(self, field: str, value: Any) -> "RawQuery":
+    def like(self, field: str, value: Any) -> "DictQuery":
         self.check_field(field)
         self._where.like(field, value)
         return self
 
-    def or_(self, or_: Or) -> "RawQuery":
+    def or_(self, or_: Or) -> "DictQuery":
         self._where.or_(or_)
         return self
 
-    def desc(self, *order_by) -> "RawQuery":
+    def desc(self, *order_by) -> "DictQuery":
         self._order_by = [f"{field} desc" for field in order_by]
         return self
 
-    def asc(self, *order_by) -> "RawQuery":
+    def asc(self, *order_by) -> "DictQuery":
         self._order_by = [f"{field} asc" for field in order_by]
         return self
 
-    def limit(self, limit: int) -> "RawQuery":
+    def limit(self, limit: int) -> "DictQuery":
         self._limit = limit
         return self
 
-    def offset(self, offset: int) -> "RawQuery":
+    def offset(self, offset: int) -> "DictQuery":
         self._offset = offset
         return self
 
-    def one(self) -> dict[str, Any] | None:
+    def one(self, conn: ReusableMysqlConnection | None) -> dict[str, Any] | None:
         if len(self._select_fields) == 0:
-            self._select_fields = [f.name for f in fields(self._model)]
+            self._select_fields = self._model_field_names
 
         self._apply_before_query_middlewares()
 
         sql, args = self._build_select()
 
-        return select_one(self._ds_id, sql, args)
+        if conn is None:
+            new_conn = self._data_source.get_reusable_connection()
+            try:
+                new_conn.acquire()
+                new_conn.begin()
+                result = self._data_source.get_executor().select_one(
+                    new_conn, sql, args
+                )
+                new_conn.commit()
+                return result
+            finally:
+                new_conn.release()
+        else:
+            return self._data_source.get_executor().select_one(conn, sql, args)
 
-    def list(self) -> list[dict[str, Any]]:
+    def list(self, conn: ReusableMysqlConnection | None) -> list[dict[str, Any]]:
         if len(self._select_fields) == 0:
-            self._select_fields = [f.name for f in fields(self._model)]
+            self._select_fields = self._model_field_names
 
         self._apply_before_query_middlewares()
 
         sql, args = self._build_select()
 
-        rows = select_many(self._ds_id, sql, args)
-        if rows is None:
-            return []
-        return rows
+        if conn is None:
+            new_conn = self._data_source.get_reusable_connection()
+            try:
+                new_conn.acquire()
+                new_conn.begin()
+                rows = self._data_source.get_executor().select_many(new_conn, sql, args)
+                new_conn.commit()
+                return rows
+            finally:
+                new_conn.release()
 
-    def page(self, page: int, page_size: int) -> tuple[List[dict[str, Any]], int]:
+        return self._data_source.get_executor().select_many(conn, sql, args)
+
+    def page(
+        self, page: int, page_size: int, conn: ReusableMysqlConnection | None
+    ) -> tuple[List[dict[str, Any]], int]:
         if len(self._select_fields) == 0:
-            self._select_fields = [f.name for f in fields(self._model)]
+            self._select_fields = self._model_field_names
 
         self._apply_before_query_middlewares()
 
@@ -158,16 +182,20 @@ class RawQuery:
         self._offset = (page - 1) * page_size
 
         sql, args = self._build_select()
-        count = self._count()
-        if count == 0:
-            return [], count
 
-        rows = select_many(self._ds_id, sql, args)
-        if rows is None:
-            return [], count
+        if conn is None:
+            new_conn = self._data_source.get_reusable_connection()
+            count = self._count(new_conn)
+            if count == 0:
+                return [], count
+        else:
+            count = self._count(conn)
+            if count == 0:
+                return [], count
+        rows = self._data_source.get_executor().select_many(conn, sql, args)
         return rows, count
 
-    def _count(self) -> int:
+    def _count(self, conn: ReusableMysqlConnection) -> int:
         table = (
             self._table if self._database is None else f"{self._database}.{self._table}"
         )
@@ -178,11 +206,22 @@ class RawQuery:
             exp, args = tree.parse()
             sql += " WHERE " + exp
 
-        return select_one(self._ds_id, sql, args)["COUNT(*)"]
+        return self._data_source.get_executor().select_one(conn, sql, args)["COUNT(*)"]
 
-    def count(self) -> int:
+    def count(self, conn: ReusableMysqlConnection | None) -> int:
         self._apply_before_query_middlewares()
-        return self._count()
+
+        if conn is None:
+            new_conn = self._data_source.get_reusable_connection()
+            try:
+                new_conn.acquire()
+                new_conn.begin()
+                count = self._count(new_conn)
+                new_conn.commit()
+                return count
+            finally:
+                new_conn.release()
+        return self._count(conn)
 
     def _build_select(self) -> tuple[str, tuple[Any, ...]]:
         select_fields = [
@@ -216,11 +255,13 @@ class RawQuery:
                 middleware(self)
 
 
-class Query(RawQuery, Generic[T]):
-    def __init__(self, cls: Type[T], database: str | None, ds_id: str):
+class Query(DictQuery, Generic[T]):
+    def __init__(
+        self, cls: Type[T], database: str | None, data_source: MysqlDataSource
+    ):
         if not hasattr(cls, "__table_name__"):
             raise ValueError("invalid model class")
-        super().__init__(cls.__table_name__, database, ds_id)
+        super().__init__(cls.__table_name__, database, data_source)
         self._cls = cls
 
     def eq(self, field: str, value: Any) -> "Query":
@@ -283,37 +324,27 @@ class Query(RawQuery, Generic[T]):
         self._offset = offset
         return self
 
-    def one(self) -> T | None:
+    def one(self, conn: ReusableMysqlConnection | None) -> T | None:
         if len(self._select_fields) == 0:
             self._select_fields = [f.name for f in fields(self._cls)]
 
-        row = super().one()
+        row = super().one(conn)
         if row is None:
             return None
         return self._cls(**row)
 
-    def list(self) -> List[T]:
+    def list(self, conn: ReusableMysqlConnection | None) -> List[T]:
         if len(self._select_fields) == 0:
             self._select_fields = [f.name for f in fields(self._cls)]
 
-        rows = super().list()
-        if len(rows) == 0:
-            return rows
+        rows = super().list(conn)
         return [self._cls(**row) for row in rows]
 
-    def page(self, page: int, page_size: int) -> tuple[List, int]:
+    def page(
+        self, page: int, page_size: int, conn: ReusableMysqlConnection | None
+    ) -> tuple[List, int]:
         if len(self._select_fields) == 0:
             self._select_fields = [f.name for f in fields(self._cls)]
 
-        rows, count = super().page(page, page_size)
-        if len(rows) == 0:
-            return rows, count
+        rows, count = super().page(page, page_size, conn)
         return [self._cls(**row) for row in rows], count
-
-
-def query(cls: Type[T], database: str | None = None, ds_id: str = "default"):
-    return Query(cls, database, ds_id)
-
-
-def raw_query(table: str, database: str | None = None, ds_id: str = "default"):
-    return RawQuery(table, database, ds_id)

@@ -1,20 +1,18 @@
 from dataclasses import fields
-from typing import Any, TypeVar, Type
+from typing import Any, TypeVar
 
 from ._middlewares import get_middlewares
-from ._models import models
-from ._mysql_executor import execute
 from ._where import Where, Or
 from .enums import Middleware
+from .mysql import MysqlDataSource, ReusableMysqlConnection
 
 T = TypeVar("T")
 
 
 class Update:
-    def __init__(self, table: str, database: str | None, ds_id: str):
+    def __init__(self, table: str, database: str | None, data_source: MysqlDataSource):
         self._table: str = table
         self._database = database
-        self._ds_id = ds_id
 
         if self._table is None or self._table == "":
             raise ValueError("table is required")
@@ -22,17 +20,17 @@ class Update:
         self._where = Where()
         self._update_fields: dict = {}
 
-        self._model: callable = models.get(
-            ds_id=self._ds_id, database=self._database, table=self._table
-        )
-        self._model_fields = [f.name for f in fields(self._model)]
+        self._data_source = data_source
+
+        self._model = data_source.get_model(self._database, self._table)
+        self._model_field_names = [f.name for f in fields(self._model)]  # type: ignore
 
     def check_field(self, field: str):
-        if field not in self._model_fields:
+        if field not in self._model_field_names:
             raise ValueError(f"invalid field [{field}]")
 
     def has_field(self, field: str):
-        return field in self._model_fields
+        return field in self._model_field_names
 
     def eq(self, field: str, value: Any) -> "Update":
         self.check_field(field)
@@ -105,7 +103,7 @@ class Update:
         self._update_fields = valid_fields
         return self
 
-    def update(self) -> int:
+    def update(self, conn: ReusableMysqlConnection) -> int:
         if self._where.count() == 0:
             # danger operation
             raise ValueError("update all is not supported")
@@ -114,9 +112,7 @@ class Update:
             raise ValueError("update fields is required")
 
         sql, args = self._build_update()
-
-        affected, last_row_id = execute(self._ds_id, sql, args)
-        return affected or 0
+        return self._execute(sql, args, conn)
 
     def _build_update(self) -> tuple[str, tuple[Any, ...]]:
         table = (
@@ -130,15 +126,31 @@ class Update:
         args += args2
         return sql, args
 
-    def delete(self) -> int:
+    def delete(self, conn: ReusableMysqlConnection) -> int:
         if self._where.count() == 0:
             # danger operation
             raise ValueError("delete all is not supported")
 
         sql, args = self._build_delete()
+        return self._execute(sql, args, conn)
 
-        affected, last_row_id = execute(self._ds_id, sql, args)
-        return affected or 0
+    def _execute(self, sql, args, conn: ReusableMysqlConnection | None) -> int:
+        if conn is None:
+            new_conn = self._data_source.get_reusable_connection()
+            try:
+                new_conn.acquire()
+                new_conn.begin()
+                row_affected, last_row_id = self._data_source.get_executor().execute(
+                    new_conn, sql, args
+                )
+                new_conn.commit()
+                return row_affected or 0
+            finally:
+                new_conn.release()
+        row_affected, last_row_id = self._data_source.get_executor().execute(
+            conn, sql, args
+        )
+        return row_affected or 0
 
     def _build_delete(self) -> tuple[str, tuple[Any, ...]]:
         table = (
@@ -156,13 +168,3 @@ class Update:
             return
         for middleware in middlewares:
             middleware(self)
-
-
-def update(
-    table_or_cls: str | Type[T], database: str | None = None, ds_id: str = "default"
-) -> Update:
-    if isinstance(table_or_cls, str):
-        table = table_or_cls
-    else:
-        table = table_or_cls.__table_name__
-    return Update(table, database, ds_id)
