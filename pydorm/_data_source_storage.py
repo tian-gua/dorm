@@ -55,7 +55,7 @@ class DataSourceStorage:
         if database is None or database == "":
             raise ValueError("database is required")
 
-        for data_source_id in self._data_sources:
+        if data_source_id in self._data_sources:
             raise ValueError(f"data source with id {data_source_id} already exists")
 
         if "mysql" == dialect:

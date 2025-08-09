@@ -28,7 +28,7 @@ class MysqlTableInspector:
                         comment=row.get("Comment", ""),
                     )
                     table_fields.append(table_field)
-                    return table_fields
+                return table_fields
             finally:
                 cursor.close()
         finally:

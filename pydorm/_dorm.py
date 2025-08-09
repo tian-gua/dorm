@@ -150,13 +150,8 @@ class Dorm:
             data_source_id, dialect, host, port, user, password, database
         )
 
-    def get_model(
-        self, database: str | None, table: str, data_source_id="default"
-    ) -> Type[Any]:
-        return self._dss.get(data_source_id).get_model(database, table)
-
-    def remote_model(self, database: str | None, table: str, data_source_id="default"):
-        self._dss.get(data_source_id).remove_model(database, table)
+    def get_data_source(self, data_source_id="default"):
+        return self._dss.get(data_source_id)
 
 
 dorm = Dorm()

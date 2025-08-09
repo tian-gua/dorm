@@ -72,7 +72,7 @@ class MysqlDataSource:
         key = f"{database or self._database}.{table}"
         if key not in self._models:
             table_structure: List[Dict] = mysql_table_inspector.load_structure(
-                self._reusable_connection, database, table
+                self._reusable_connection, database or self._database, table
             )
             fields = [
                 (table_field["field_"], any, field(default=None))
@@ -88,3 +88,11 @@ class MysqlDataSource:
             logger.info(f"[{self._data_source_id}] Model {key} removed")
         else:
             logger.warning(f"[{self._data_source_id}] Model {key} not found")
+
+    def load_structure(self, database: str, table: str = "") -> List[Dict[str, Any]]:
+        """加载数据源的表结构"""
+        if not table:
+            raise ValueError("Table name must be provided to load structure")
+        return mysql_table_inspector.load_structure(
+            self._reusable_connection, database or self._database, table
+        )

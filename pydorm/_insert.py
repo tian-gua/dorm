@@ -20,7 +20,9 @@ class Insert:
         self._model = data_source.get_model(self._database, self._table)
         self._model_field_names = [f.name for f in fields(self._model)]  # type: ignore
 
-    def insert(self, data: Any, conn: ReusableMysqlConnection | None) -> (int, int):
+    def insert(
+        self, data: Any, conn: ReusableMysqlConnection | None = None
+    ) -> (int, int):
         if data is None:
             raise ValueError("null data")
 
@@ -33,7 +35,7 @@ class Insert:
         self,
         sql: str,
         args: tuple[Any, ...],
-        conn: ReusableMysqlConnection | None,
+        conn: ReusableMysqlConnection | None = None,
     ) -> (int, int):
         if conn is None:
             new_conn = self._data_source.get_reusable_connection()
@@ -79,7 +81,7 @@ class Insert:
         return sql, args
 
     def insert_bulk(
-        self, data_list: list[dict], conn: ReusableMysqlConnection | None
+        self, data_list: list[dict], conn: ReusableMysqlConnection | None = None
     ) -> int:
         if data_list is None or len(data_list) == 0:
             raise ValueError("data is required")
@@ -87,7 +89,9 @@ class Insert:
         sql, args = self._build_insert_bulk(data_list)
         return self._execute_many(sql, args, conn)
 
-    def _execute_many(self, sql, args, conn: ReusableMysqlConnection | None) -> int:
+    def _execute_many(
+        self, sql, args, conn: ReusableMysqlConnection | None = None
+    ) -> int:
         if conn is None:
             new_conn = self._data_source.get_reusable_connection()
             try:

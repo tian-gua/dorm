@@ -6,7 +6,7 @@ from pymysql import MySQLError
 from pymysql.connections import Connection
 from pymysql.cursors import DictCursor
 
-from pydorm.errors.connection_exception import ConnectionException
+from ..errors import ConnectionException
 
 
 class ReusableMysqlConnection:

@@ -103,7 +103,7 @@ class Update:
         self._update_fields = valid_fields
         return self
 
-    def update(self, conn: ReusableMysqlConnection) -> int:
+    def update(self, conn: ReusableMysqlConnection | None = None) -> int:
         if self._where.count() == 0:
             # danger operation
             raise ValueError("update all is not supported")
@@ -126,7 +126,7 @@ class Update:
         args += args2
         return sql, args
 
-    def delete(self, conn: ReusableMysqlConnection) -> int:
+    def delete(self, conn: ReusableMysqlConnection | None = None) -> int:
         if self._where.count() == 0:
             # danger operation
             raise ValueError("delete all is not supported")
@@ -134,7 +134,7 @@ class Update:
         sql, args = self._build_delete()
         return self._execute(sql, args, conn)
 
-    def _execute(self, sql, args, conn: ReusableMysqlConnection | None) -> int:
+    def _execute(self, sql, args, conn: ReusableMysqlConnection | None = None) -> int:
         if conn is None:
             new_conn = self._data_source.get_reusable_connection()
             try:

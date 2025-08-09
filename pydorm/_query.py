@@ -126,7 +126,7 @@ class DictQuery:
         self._offset = offset
         return self
 
-    def one(self, conn: ReusableMysqlConnection | None) -> dict[str, Any] | None:
+    def one(self, conn: ReusableMysqlConnection | None = None) -> dict[str, Any] | None:
         if len(self._select_fields) == 0:
             self._select_fields = self._model_field_names
 
@@ -149,7 +149,7 @@ class DictQuery:
         else:
             return self._data_source.get_executor().select_one(conn, sql, args)
 
-    def list(self, conn: ReusableMysqlConnection | None) -> list[dict[str, Any]]:
+    def list(self, conn: ReusableMysqlConnection | None = None) -> list[dict[str, Any]]:
         if len(self._select_fields) == 0:
             self._select_fields = self._model_field_names
 
@@ -171,7 +171,7 @@ class DictQuery:
         return self._data_source.get_executor().select_many(conn, sql, args)
 
     def page(
-        self, page: int, page_size: int, conn: ReusableMysqlConnection | None
+        self, page: int, page_size: int, conn: ReusableMysqlConnection | None = None
     ) -> tuple[List[dict[str, Any]], int]:
         if len(self._select_fields) == 0:
             self._select_fields = self._model_field_names
@@ -208,7 +208,7 @@ class DictQuery:
 
         return self._data_source.get_executor().select_one(conn, sql, args)["COUNT(*)"]
 
-    def count(self, conn: ReusableMysqlConnection | None) -> int:
+    def count(self, conn: ReusableMysqlConnection | None = None) -> int:
         self._apply_before_query_middlewares()
 
         if conn is None:
@@ -324,7 +324,7 @@ class Query(DictQuery, Generic[T]):
         self._offset = offset
         return self
 
-    def one(self, conn: ReusableMysqlConnection | None) -> T | None:
+    def one(self, conn: ReusableMysqlConnection | None = None) -> T | None:
         if len(self._select_fields) == 0:
             self._select_fields = [f.name for f in fields(self._cls)]
 
@@ -333,7 +333,7 @@ class Query(DictQuery, Generic[T]):
             return None
         return self._cls(**row)
 
-    def list(self, conn: ReusableMysqlConnection | None) -> List[T]:
+    def list(self, conn: ReusableMysqlConnection | None = None) -> List[T]:
         if len(self._select_fields) == 0:
             self._select_fields = [f.name for f in fields(self._cls)]
 
@@ -341,7 +341,7 @@ class Query(DictQuery, Generic[T]):
         return [self._cls(**row) for row in rows]
 
     def page(
-        self, page: int, page_size: int, conn: ReusableMysqlConnection | None
+        self, page: int, page_size: int, conn: ReusableMysqlConnection | None = None
     ) -> tuple[List, int]:
         if len(self._select_fields) == 0:
             self._select_fields = [f.name for f in fields(self._cls)]
