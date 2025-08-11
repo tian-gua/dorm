@@ -42,8 +42,8 @@ class Dorm:
     def raw_query(
         self,
         sql: str,
-        args: tuple[any, ...],
-        conn: ReusableMysqlConnection | None,
+        args: tuple[Any, ...],
+        conn: ReusableMysqlConnection | None = None,
         data_source_id="default",
     ) -> List[Dict]:
 
