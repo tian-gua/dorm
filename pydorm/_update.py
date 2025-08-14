@@ -5,12 +5,15 @@ from ._middlewares import get_middlewares
 from ._where import Where, Or
 from .enums import Middleware
 from .mysql import MysqlDataSource, ReusableMysqlConnection
+from .utils.random_utils import generate_random_string
 
 T = TypeVar("T")
 
 
 class Update:
     def __init__(self, table: str, database: str | None, data_source: MysqlDataSource):
+        self._operation_id = generate_random_string("update-", 10)
+
         self._table: str = table
         self._database = database
 
@@ -138,7 +141,7 @@ class Update:
         if conn is None:
             new_conn = self._data_source.get_reusable_connection()
             try:
-                new_conn.acquire()
+                new_conn.acquire(operation_id=self._operation_id)
                 new_conn.begin()
                 row_affected, last_row_id = self._data_source.get_executor().execute(
                     new_conn, sql, args
@@ -146,7 +149,7 @@ class Update:
                 new_conn.commit()
                 return row_affected or 0
             finally:
-                new_conn.release()
+                new_conn.release(operation_id=self._operation_id)
         row_affected, last_row_id = self._data_source.get_executor().execute(
             conn, sql, args
         )

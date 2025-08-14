@@ -1,15 +1,18 @@
 from dataclasses import fields
-from typing import Any, TypeVar
+from typing import Any, TypeVar, Tuple, List, Dict
 
 from ._middlewares import get_middlewares
 from .enums import Middleware
 from .mysql import MysqlDataSource, ReusableMysqlConnection
+from .utils.random_utils import generate_random_string
 
 T = TypeVar("T")
 
 
 class Insert:
     def __init__(self, table: str, database: str | None, data_source: MysqlDataSource):
+        self._operation_id = generate_random_string("update-", 10)
+
         self._table: str = table
         self._database = database
         self._data_source = data_source
@@ -22,7 +25,7 @@ class Insert:
 
     def insert(
         self, data: Any, conn: ReusableMysqlConnection | None = None
-    ) -> (int, int):
+    ) -> Tuple[int, int]:
         if data is None:
             raise ValueError("null data")
 
@@ -34,13 +37,13 @@ class Insert:
     def _execute(
         self,
         sql: str,
-        args: tuple[Any, ...],
+        args: Tuple[Any, ...],
         conn: ReusableMysqlConnection | None = None,
-    ) -> (int, int):
+    ) -> Tuple[int, int]:
         if conn is None:
             new_conn = self._data_source.get_reusable_connection()
             try:
-                new_conn.acquire()
+                new_conn.acquire(operation_id=self._operation_id)
                 new_conn.begin()
                 row_affected, last_row_id = self._data_source.get_executor().execute(
                     new_conn, sql, args
@@ -48,7 +51,7 @@ class Insert:
                 new_conn.commit()
                 return row_affected, last_row_id
             finally:
-                new_conn.release()
+                new_conn.release(operation_id=self._operation_id)
         return self._data_source.get_executor().execute(conn, sql, args)
 
     # noinspection PyMethodMayBeStatic
@@ -60,7 +63,7 @@ class Insert:
         data = {k: v for k, v in data.items() if v is not None}
         return data
 
-    def _build_insert(self, data: dict) -> tuple[str, tuple[Any, ...]]:
+    def _build_insert(self, data: Dict) -> Tuple[str, Tuple[Any, ...]]:
         placeholder = []
         keys = []
         values = []
@@ -81,7 +84,7 @@ class Insert:
         return sql, args
 
     def insert_bulk(
-        self, data_list: list[dict], conn: ReusableMysqlConnection | None = None
+        self, data_list: List[Dict], conn: ReusableMysqlConnection | None = None
     ) -> int:
         if data_list is None or len(data_list) == 0:
             raise ValueError("data is required")
@@ -95,7 +98,7 @@ class Insert:
         if conn is None:
             new_conn = self._data_source.get_reusable_connection()
             try:
-                new_conn.acquire()
+                new_conn.acquire(operation_id=self._operation_id)
                 new_conn.begin()
                 row_affected = self._data_source.get_executor().executemany(
                     new_conn, sql, args
@@ -103,10 +106,10 @@ class Insert:
                 new_conn.commit()
                 return row_affected
             finally:
-                new_conn.release()
+                new_conn.release(operation_id=self._operation_id)
         return self._data_source.get_executor().executemany(conn, sql, args)
 
-    def _build_insert_bulk(self, data: list[dict]) -> tuple[str, list[tuple[any, ...]]]:
+    def _build_insert_bulk(self, data: List[Dict]) -> Tuple[str, List[Tuple[Any, ...]]]:
         placeholder = []
         keys = []
         for k, v in data[0].items():
@@ -138,7 +141,7 @@ class Insert:
         return self._execute(sql, args, conn)
 
     def _build_upsert(
-        self, data: dict, update_fields: list[str] | None = None
+        self, data: dict, update_fields: List[str] | None = None
     ) -> tuple[str, tuple[Any, ...]]:
         placeholder = []
         keys = []
@@ -175,8 +178,8 @@ class Insert:
 
     def upsert_bulk(
         self,
-        data: list[dict],
-        update_fields: list[str] | None = None,
+        data: List[Dict],
+        update_fields: List[str] | None = None,
         conn: ReusableMysqlConnection | None = None,
     ) -> int:
         if data is None or len(data) == 0:
@@ -186,8 +189,8 @@ class Insert:
         return self._execute_many(sql, args, conn)
 
     def _build_upsert_bulk(
-        self, data: list[dict], update_fields: list[str] | None = None
-    ) -> tuple[str, list[tuple[any, ...]]]:
+        self, data: List[Dict], update_fields: List[str] | None = None
+    ) -> Tuple[str, List[Tuple[Any, ...]]]:
         placeholder = []
         keys = []
         for k in data[0].keys():
@@ -219,7 +222,7 @@ class Insert:
         args = [tuple(datum[k] for k in keys) for datum in data]
         return sql, args
 
-    def _apply_before_insert_middlewares(self, data: dict):
+    def _apply_before_insert_middlewares(self, data: Dict):
         middlewares = get_middlewares(Middleware.BEFORE_INSERT)
         if middlewares is None or len(middlewares) == 0:
             return

@@ -9,7 +9,9 @@ class MysqlTableInspector:
     def load_structure(
         self, conn: ReusableMysqlConnection, database: str, table: str
     ) -> List[Dict]:
-        conn.acquire()
+        need_acquire = not conn.is_locked()
+        if need_acquire:
+            conn.acquire()
         try:
             cursor = conn.cursor()
             try:
@@ -32,7 +34,8 @@ class MysqlTableInspector:
             finally:
                 cursor.close()
         finally:
-            conn.release()
+            if need_acquire:
+                conn.release()
 
 
 mysql_table_inspector = MysqlTableInspector()

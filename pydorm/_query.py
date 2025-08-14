@@ -1,3 +1,4 @@
+from .utils.random_utils import generate_random_string
 from dataclasses import fields
 from typing import List, Any, TypeVar, Type, Generic
 
@@ -16,6 +17,8 @@ class DictQuery:
         database: str | None,
         data_source: MysqlDataSource,
     ):
+        self._operation_id = generate_random_string("query-", 10)
+
         self._table = table
         self._database = database
 
@@ -137,7 +140,7 @@ class DictQuery:
         if conn is None:
             new_conn = self._data_source.get_reusable_connection()
             try:
-                new_conn.acquire()
+                new_conn.acquire(operation_id=self._operation_id)
                 new_conn.begin()
                 result = self._data_source.get_executor().select_one(
                     new_conn, sql, args
@@ -145,7 +148,7 @@ class DictQuery:
                 new_conn.commit()
                 return result
             finally:
-                new_conn.release()
+                new_conn.release(operation_id=self._operation_id)
         else:
             return self._data_source.get_executor().select_one(conn, sql, args)
 
@@ -160,13 +163,13 @@ class DictQuery:
         if conn is None:
             new_conn = self._data_source.get_reusable_connection()
             try:
-                new_conn.acquire()
+                new_conn.acquire(operation_id=self._operation_id)
                 new_conn.begin()
                 rows = self._data_source.get_executor().select_many(new_conn, sql, args)
                 new_conn.commit()
                 return rows
             finally:
-                new_conn.release()
+                new_conn.release(operation_id=self._operation_id)
 
         return self._data_source.get_executor().select_many(conn, sql, args)
 
@@ -188,10 +191,18 @@ class DictQuery:
             count = self._count(new_conn)
             if count == 0:
                 return [], count
-        else:
-            count = self._count(conn)
-            if count == 0:
-                return [], count
+            try:
+                new_conn.acquire(operation_id=self._operation_id)
+                new_conn.begin()
+                rows = self._data_source.get_executor().select_many(new_conn, sql, args)
+                new_conn.commit()
+                return rows, count
+            finally:
+                new_conn.release(operation_id=self._operation_id)
+
+        count = self._count(conn)
+        if count == 0:
+            return [], count
         rows = self._data_source.get_executor().select_many(conn, sql, args)
         return rows, count
 
@@ -220,7 +231,7 @@ class DictQuery:
                 new_conn.commit()
                 return count
             finally:
-                new_conn.release()
+                new_conn.release(operation_id=self._operation_id)
         return self._count(conn)
 
     def _build_select(self) -> tuple[str, tuple[Any, ...]]:

@@ -4,7 +4,7 @@ from ._initializer import init
 from ._middlewares import use_middleware
 
 __author__ = "melon"
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 
 __all__ = [
     "init",

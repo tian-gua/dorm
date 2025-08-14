@@ -5,7 +5,7 @@ from loguru import logger
 from pymysql import MySQLError
 from pymysql.connections import Connection
 from pymysql.cursors import DictCursor
-
+from .._settings import enable_connection_lock_log
 from ..errors import ConnectionException
 
 
@@ -28,7 +28,20 @@ class ReusableMysqlConnection:
         )
         self._keep_alive_thread.start()
 
-    def acquire(self, timeout: float = 5):
+    def is_locked(self) -> bool:
+        """
+        检查锁是否已经被占用。
+
+        Returns:
+            bool: 如果锁被占用，返回 True；否则返回 False。
+        """
+        return self._lock.locked()
+
+    def acquire(self, timeout: float = 5, operation_id: str = None):
+        if enable_connection_lock_log:
+            logger.debug(
+                f"[{operation_id}] try to lock connection[{id(self._conn)}] with timeout {timeout} seconds."
+            )
         if self._lock.acquire(timeout=timeout):
             try:
                 self._in_use = True
@@ -36,6 +49,10 @@ class ReusableMysqlConnection:
                     self._conn = self._create_connection()
                     self._active = True
                     logger.info(f"[{self._data_source_id}] Connection created.")
+                if enable_connection_lock_log:
+                    logger.debug(
+                        f"'[{operation_id}] Connection[{id(self._conn)}] locked."
+                    )
             except Exception as e:
                 self._in_use = False  # 添加这行
                 self._lock.release()  # 添加这行
@@ -45,9 +62,11 @@ class ReusableMysqlConnection:
                 f"Failed to acquire connection within {timeout} seconds."
             )
 
-    def release(self):
+    def release(self, operation_id: str = None):
         self._in_use = False  # 取消使用中标记
         self._lock.release()
+        if enable_connection_lock_log:
+            logger.debug(f"[{operation_id}] Connection[{id(self._conn)}] released.")
 
     def _check_connection(self):
         if not self._in_use:

@@ -8,6 +8,7 @@ from ._insert import Insert
 from ._query import Query, DictQuery
 from ._update import Update
 from .mysql import ReusableMysqlConnection
+from .utils.random_utils import generate_random_string
 
 T = TypeVar("T")
 
@@ -17,6 +18,8 @@ class Dorm:
         self._init = False
         self._config_dict = None
         self._dss = DataSourceStorage()
+
+        self._tx_id = None
 
     def is_initialized(self):
         return self._init
@@ -46,13 +49,14 @@ class Dorm:
         conn: ReusableMysqlConnection | None = None,
         data_source_id="default",
     ) -> List[Dict]:
+        raw_query_id = generate_random_string("raw-query-", 10)
 
         sql = sql.replace("?", "%s")
 
         if conn is None:
             new_conn = self._dss.get(data_source_id).get_reusable_connection()
             try:
-                new_conn.acquire()
+                new_conn.acquire(operation_id=raw_query_id)
                 new_conn.begin()
                 cursor: DictCursor = new_conn.cursor()
                 result = cursor.execute(sql, args)
@@ -63,7 +67,7 @@ class Dorm:
                     return []
                 return list(rows)
             finally:
-                new_conn.release()
+                new_conn.release(operation_id=raw_query_id)
         else:
             cursor: DictCursor = conn.cursor()
             result = cursor.execute(sql, args)
@@ -99,9 +103,11 @@ class Dorm:
         return Insert(table, database, data_source=self._dss.get(data_source_id))
 
     def begin(self, data_source_id="default") -> ReusableMysqlConnection:
+        self._tx_id = generate_random_string("tx-", 10)
+
         data_source = self._dss.get(data_source_id)
         conn = data_source.get_reusable_connection()
-        conn.acquire()
+        conn.acquire(operation_id=self._tx_id)
         try:
             conn.begin()
             return conn
@@ -109,7 +115,7 @@ class Dorm:
             logger.error(
                 f"Failed to begin transaction on data source '{data_source_id}': {e}"
             )
-            conn.release()
+            conn.release(operation_id=self._tx_id)
             raise e
 
     # noinspection PyMethodMayBeStatic
@@ -122,7 +128,7 @@ class Dorm:
             logger.error(f"Failed to commit transaction: {e}")
             raise e
         finally:
-            conn.release()
+            conn.release(operation_id=self._tx_id)
 
     # noinspection PyMethodMayBeStatic
     def rollback(self, conn: ReusableMysqlConnection):
@@ -134,7 +140,7 @@ class Dorm:
             logger.error(f"Failed to rollback transaction: {e}")
             raise e
         finally:
-            conn.release()
+            conn.release(operation_id=self._tx_id)
 
     def add_data_source(
         self,
