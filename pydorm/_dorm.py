@@ -99,7 +99,7 @@ class Dorm:
 
     def insert_bulk(
         self,
-        wrapper: InsertWrapper[T],
+        cls: Type[T],
         data: List[Dict[str, Any]],
         duplicate_key_update: List[str] | Literal["all"] | None = None,
         conn: ReusableMysqlConnection | None = None,
@@ -108,6 +108,8 @@ class Dorm:
         ds = self._dss.get(data_source_id)
         if ds is None:
             raise ValueError(f"Data source with ID '{data_source_id}' not found")
+
+        wrapper = InsertWrapper[T](cls)
         return insert_bulk(wrapper, data, duplicate_key_update, conn=conn, data_source=ds)
 
     def update(
