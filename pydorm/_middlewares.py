@@ -1,7 +1,5 @@
 from typing import Any, Callable, Dict, List
 
-from pydorm.enums import Middleware
-
 from ._delete_wrapper import DeleteWrapper
 from ._query_wrapper import QueryWrapper
 from ._update_wrapper import UpdateWrapper

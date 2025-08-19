@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple, Type, TypeVar
+from typing import Any, Dict, List, Tuple, TypeVar
 
 from ._middlewares import before_query_middlewares
 from ._query_wrapper import QueryWrapper

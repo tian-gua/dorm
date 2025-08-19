@@ -1,4 +1,4 @@
-from typing import Any, Dict, Generic, List, Type, TypeVar, get_type_hints
+from typing import Any, Dict, Generic, Type, TypeVar, get_type_hints
 from pydorm._where import Or, Where
 from .protocols import EntityProtocol
 

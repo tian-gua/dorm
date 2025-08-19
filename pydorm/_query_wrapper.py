@@ -1,4 +1,4 @@
-from typing import Any, Dict, Generic, List, Type, TypeVar, get_type_hints
+from typing import Any, Generic, List, Type, TypeVar, get_type_hints
 from pydorm._where import Or, Where
 from .protocols import EntityProtocol
 
@@ -121,9 +121,7 @@ class QueryWrapper(Generic[T]):
         if len(self._select_fields) == 0:
             self._select_fields = self._fields
 
-        select_fields = [
-            field for field in self._select_fields if field not in self._ignore_fields
-        ]
+        select_fields = [field for field in self._select_fields if field not in self._ignore_fields]
 
         sql = f'SELECT {"DISTINCT " if self._distinct and self._select_fields else ""}{",".join(select_fields)} FROM {self._table}'
         args = ()
