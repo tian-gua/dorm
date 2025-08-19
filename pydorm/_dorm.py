@@ -32,11 +32,20 @@ class Dorm:
     def is_initialized(self):
         return self._init
 
-    def init(self, config_dict):
+    def init(self, config_dict: Dict[str, Any]):
         self._config_dict = config_dict
         self._dss.load(config_dict)
         self._init = True
         logger.info("dorm initialized")
+
+    def qw(self, cls: Type[T]) -> QueryWrapper[T]:
+        return QueryWrapper[T](cls)
+
+    def uw(self, cls: Type[T]) -> UpdateWrapper[T]:
+        return UpdateWrapper[T](cls)
+
+    def dw(self, cls: Type[T]) -> DeleteWrapper[T]:
+        return DeleteWrapper[T](cls)
 
     def find(
         self,
@@ -189,7 +198,6 @@ class Dorm:
             conn.release(operation_id=self._tx_id)
             raise e
 
-    # noinspection PyMethodMayBeStatic
     def commit(self, conn: ReusableMysqlConnection):
         if conn is None:
             raise RuntimeError("No connection to commit")
@@ -201,7 +209,6 @@ class Dorm:
         finally:
             conn.release(operation_id=self._tx_id)
 
-    # noinspection PyMethodMayBeStatic
     def rollback(self, conn: ReusableMysqlConnection):
         if conn is None:
             raise RuntimeError("No connection to rollback")

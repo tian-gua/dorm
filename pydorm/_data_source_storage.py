@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Any, Dict
 
 from .mysql import MysqlDataSource
 
@@ -10,7 +10,7 @@ class DataSourceStorage:
     def default(self) -> MysqlDataSource | None:
         return self._data_sources.get("default", None)
 
-    def load(self, config_dict: dict):
+    def load(self, config_dict: Dict[str, Any]):
         data_source_config = config_dict.get("data_source")
         if data_source_config is None:
             raise ValueError("data_source config not found")
