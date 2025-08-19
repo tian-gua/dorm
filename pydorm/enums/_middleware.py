@@ -2,9 +2,8 @@ from enum import Enum
 
 
 class Middleware(Enum):
-    BEFORE_QUERY = 'before_query'
-    BEFORE_INSERT = 'before_insert'
-    BEFORE_UPDATE = 'before_update'
+    BEFORE_QUERY = "before_query"
+    BEFORE_INSERT = "before_insert"
 
     def __str__(self):
         return self.value

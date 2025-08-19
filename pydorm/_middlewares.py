@@ -1,29 +1,22 @@
-from typing import Callable
+from typing import Any, Callable, Dict, List
 
 from pydorm.enums import Middleware
 
-before_query_middlewares: list[Callable[..., None]] = []
-before_update_middlewares: list[Callable[..., None]] = []
-before_insert_middlewares: list[Callable[[..., dict], None]] = []
+from ._delete_wrapper import DeleteWrapper
+from ._query_wrapper import QueryWrapper
+from ._update_wrapper import UpdateWrapper
+
+before_query_middlewares: List[
+    Callable[[QueryWrapper[Any] | UpdateWrapper[Any] | DeleteWrapper[Any]], None]
+] = []
+before_insert_middlewares: List[Callable[[Dict[str, Any] | List[Dict[str, Any]]], None]] = []
 
 
-def use_middleware(middleware_type: Middleware, middleware):
-    if middleware_type == Middleware.BEFORE_QUERY:
-        before_query_middlewares.append(middleware)
-    elif middleware_type == Middleware.BEFORE_UPDATE:
-        before_update_middlewares.append(middleware)
-    elif middleware_type == Middleware.BEFORE_INSERT:
-        before_insert_middlewares.append(middleware)
-    else:
-        raise ValueError(f'unsupported middleware type: {middleware_type}')
+def use_query_middleware(
+    middleware: Callable[[QueryWrapper[Any] | UpdateWrapper[Any] | DeleteWrapper[Any]], None],
+):
+    before_query_middlewares.append(middleware)
 
 
-def get_middlewares(middleware_type: Middleware):
-    if middleware_type == Middleware.BEFORE_QUERY:
-        return before_query_middlewares
-    elif middleware_type == Middleware.BEFORE_UPDATE:
-        return before_update_middlewares
-    elif middleware_type == Middleware.BEFORE_INSERT:
-        return before_insert_middlewares
-    else:
-        raise ValueError(f'unsupported middleware type: {middleware_type}')
+def use_insert_middleware(middleware: Callable[[Dict[str, Any] | List[Dict[str, Any]]], None]):
+    before_insert_middlewares.append(middleware)

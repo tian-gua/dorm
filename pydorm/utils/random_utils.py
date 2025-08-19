@@ -2,7 +2,7 @@ import random
 import string
 
 
-def generate_random_string(prefix: str = "", length=10, seed=None):
+def generate_random_string(prefix: str = "", length=10, seed: int | None = None) -> str:
     """
     生成一个随机的字符串，包含字母和数字。
 

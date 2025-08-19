@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Dict, List, Tuple
 
 from loguru import logger
 
@@ -18,16 +18,14 @@ class MysqlExecutor:
         """
         self.log_sql = log_sql
 
-    def _log_execution(
-        self, conn: ReusableMysqlConnection, sql: str, args: Any
-    ) -> None:
+    def _log_execution(self, conn: ReusableMysqlConnection, sql: str, args: Any) -> None:
         """记录SQL执行日志"""
         if not self.log_sql:
             return
 
         logger.debug(f"[{id(conn)}] {sql}")
-        if args is not None and len(args) > 0:
-            logger.debug(f"### {args}")
+        # if args is not None and len(args) > 0:
+        #     logger.debug(f"### {args}")
 
     # noinspection PyMethodMayBeStatic
     def _prepare_sql(self, sql: str) -> str:
@@ -47,8 +45,8 @@ class MysqlExecutor:
         self,
         conn: ReusableMysqlConnection,
         sql: str,
-        args: tuple[Any, ...] = (),
-    ) -> dict[str, Any] | None:
+        args: Tuple[Any, ...] = (),
+    ) -> Dict[str, Any] | None:
         """
         执行查询并返回单行结果
 
@@ -103,8 +101,8 @@ class MysqlExecutor:
         self,
         conn: ReusableMysqlConnection,
         sql: str,
-        args: tuple[Any, ...] = (),
-    ) -> tuple[int, int]:
+        args: Tuple[Any, ...] = (),
+    ) -> Tuple[int, int]:
         """
         执行SQL语句（INSERT、UPDATE、DELETE）
 
@@ -128,7 +126,7 @@ class MysqlExecutor:
         self,
         conn: ReusableMysqlConnection,
         sql: str,
-        args: list[tuple[Any, ...]],
+        args: List[Tuple[Any, ...]],
     ) -> int:
         """
         批量执行SQL语句
@@ -146,7 +144,7 @@ class MysqlExecutor:
         with self._get_cursor(conn) as cursor:
             prepared_sql = self._prepare_sql(sql)
             row_affected = cursor.executemany(prepared_sql, args)
-            return row_affected
+            return row_affected or 0
 
 
 mysql_executor = MysqlExecutor()

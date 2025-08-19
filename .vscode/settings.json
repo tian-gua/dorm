@@ -1,0 +1,34 @@
+{
+  "editor.insertSpaces": true,
+  "editor.formatOnSave": true,
+  "files.exclude": {
+    "node_modules": true,
+    ".idea": true,
+    ".git": true,
+    "**/__pycache__": true
+  },
+
+  // Python 解释器配置
+  "python.defaultInterpreterPath": "./.venv/bin/python",
+
+  // Python 代码格式化工具配置（需要先安装 black）
+  "python.formatting.provider": "black",
+
+  // 自动保存和格式化
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+
+  // 测试配置（需要先安装 pytest）
+  "python.testing.pytestEnabled": false,
+  "python.testing.unittestEnabled": true,
+
+  // 调试配置
+  "python.terminal.activateEnvironment": true,
+
+  // 编辑器配置
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "editor.rulers": [100],
+  "editor.wordWrap": "on"
+}

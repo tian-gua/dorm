@@ -1,361 +1,189 @@
+from typing import Any, Dict, List, Tuple, Type, TypeVar
+
+from ._middlewares import before_query_middlewares
+from ._query_wrapper import QueryWrapper
+from .mysql._mysql_data_source import MysqlDataSource
+from .mysql._reusable_mysql_connection import ReusableMysqlConnection
 from .utils.random_utils import generate_random_string
-from dataclasses import fields
-from typing import List, Any, TypeVar, Type, Generic
 
-from ._middlewares import get_middlewares
-from ._where import Where, Or
-from .enums import Middleware
-from .mysql import MysqlDataSource, ReusableMysqlConnection
-
-T = TypeVar("T")
+T = TypeVar("T", bound=Any)
 
 
-class DictQuery:
-    def __init__(
-        self,
-        table: str,
-        database: str | None,
-        data_source: MysqlDataSource,
-    ):
-        self._operation_id = generate_random_string("query-", 10)
+def find(
+    wrapper: QueryWrapper[T],
+    conn: ReusableMysqlConnection | None = None,
+    data_source: MysqlDataSource | None = None,
+) -> T | None:
+    result = find_dict(wrapper, conn, data_source)
+    if result is None:
+        return None
+    return wrapper.get_type()(**result)
 
-        self._table = table
-        self._database = database
 
-        if self._table is None or self._table == "":
-            raise ValueError("table is required")
+def find_dict(
+    wrapper: QueryWrapper[T],
+    conn: ReusableMysqlConnection | None = None,
+    data_source: MysqlDataSource | None = None,
+) -> Dict[str, Any] | None:
 
-        self._data_source = data_source
-        self._where = Where()
-        self._select_fields = []
-        self._ignore_fields = []
-        self._order_by = None
-        self._limit = None
-        self._offset = None
-        self._distinct = False
+    if data_source is None:
+        raise ValueError("data_source must be provided")
 
-        self._model = data_source.get_model(self._database, self._table)
-        self._model_field_names = [f.name for f in fields(self._model)]  # type: ignore
+    operation_id = generate_random_string("R-", 10)
 
-    def select(self, *select_fields, distinct=False) -> "DictQuery":
-        for select_field in select_fields:
-            if select_field not in self._model_field_names:
-                raise ValueError(f"invalid field [{select_field}]")
+    for middleware in before_query_middlewares:
+        if callable(middleware):
+            middleware(wrapper)
 
-        self._select_fields = select_fields
-        self._distinct = distinct
-        return self
+    sql, args = wrapper.build_sql()
 
-    def ignore(self, *ignore_fields) -> "DictQuery":
+    if conn is None:
+        new_conn = data_source.get_reusable_connection()
+        try:
+            new_conn.acquire(operation_id=operation_id)
+            new_conn.begin()
+            result: Dict[str, Any] | None = data_source.get_executor().select_one(
+                new_conn, sql, args
+            )
+            new_conn.commit()
+            return result
+        finally:
+            new_conn.release(operation_id=operation_id)
+    else:
+        return data_source.get_executor().select_one(conn, sql, args)
 
-        for ignore_field in ignore_fields:
-            if ignore_field not in self._model_field_names:
-                raise ValueError(f"invalid field [{ignore_field}]")
 
-        self._ignore_fields = ignore_fields
-        return self
+def list(
+    wrapper: QueryWrapper[T],
+    conn: ReusableMysqlConnection | None = None,
+    data_source: MysqlDataSource | None = None,
+) -> List[T]:
+    result = list_dict(wrapper, conn, data_source)
+    if result is None:
+        return []
+    return [wrapper.get_type()(**item) for item in result]
 
-    def check_field(self, field: str):
-        if field not in self._model_field_names:
-            raise ValueError(f"invalid field [{field}]")
 
-    def eq(self, field: str, value: Any) -> "DictQuery":
-        self.check_field(field)
-        self._where.eq(field, value)
-        return self
+def list_dict(
+    wrapper: QueryWrapper[T],
+    conn: ReusableMysqlConnection | None = None,
+    data_source: MysqlDataSource | None = None,
+) -> List[Dict[str, Any]]:
+    if data_source is None:
+        raise ValueError("data_source must be provided")
 
-    def ne(self, field: str, value: Any) -> "DictQuery":
-        self.check_field(field)
-        self._where.ne(field, value)
-        return self
+    operation_id = generate_random_string("R-", 10)
 
-    def gt(self, field: str, value: Any) -> "DictQuery":
-        self.check_field(field)
-        self._where.gt(field, value)
-        return self
+    for middleware in before_query_middlewares:
+        if callable(middleware):
+            middleware(wrapper)
 
-    def ge(self, field: str, value: Any) -> "DictQuery":
-        self.check_field(field)
-        self._where.ge(field, value)
-        return self
+    sql, args = wrapper.build_sql()
+    if conn is None:
+        new_conn = data_source.get_reusable_connection()
+        try:
+            new_conn.acquire(operation_id=operation_id)
+            new_conn.begin()
+            result: List[Dict[str, Any]] | None = data_source.get_executor().select_many(
+                new_conn, sql, args
+            )
+            new_conn.commit()
+            return result
+        finally:
+            new_conn.release(operation_id=operation_id)
+    else:
+        return data_source.get_executor().select_many(conn, sql, args)
 
-    def lt(self, field: str, value: Any) -> "DictQuery":
-        self.check_field(field)
-        self._where.lt(field, value)
-        return self
 
-    def le(self, field: str, value: Any) -> "DictQuery":
-        self.check_field(field)
-        self._where.le(field, value)
-        return self
+def count(
+    wrapper: QueryWrapper[T],
+    conn: ReusableMysqlConnection | None = None,
+    data_source: MysqlDataSource | None = None,
+    load_middlewares: bool = True,
+) -> int:
+    if data_source is None:
+        raise ValueError("data_source must be provided")
 
-    def in_(self, field: str, value: Any) -> "DictQuery":
-        self.check_field(field)
-        self._where.in_(field, value)
-        return self
+    operation_id = generate_random_string("R-", 10)
 
-    def l_like(self, field: str, value: Any) -> "DictQuery":
-        self.check_field(field)
-        self._where.l_like(field, value)
-        return self
-
-    def r_like(self, field: str, value: Any) -> "DictQuery":
-        self.check_field(field)
-        self._where.r_like(field, value)
-        return self
-
-    def like(self, field: str, value: Any) -> "DictQuery":
-        self.check_field(field)
-        self._where.like(field, value)
-        return self
-
-    def or_(self, or_: Or) -> "DictQuery":
-        self._where.or_(or_)
-        return self
-
-    def desc(self, *order_by) -> "DictQuery":
-        self._order_by = [f"{field} desc" for field in order_by]
-        return self
-
-    def asc(self, *order_by) -> "DictQuery":
-        self._order_by = [f"{field} asc" for field in order_by]
-        return self
-
-    def limit(self, limit: int) -> "DictQuery":
-        self._limit = limit
-        return self
-
-    def offset(self, offset: int) -> "DictQuery":
-        self._offset = offset
-        return self
-
-    def one(self, conn: ReusableMysqlConnection | None = None) -> dict[str, Any] | None:
-        if len(self._select_fields) == 0:
-            self._select_fields = self._model_field_names
-
-        self._apply_before_query_middlewares()
-
-        sql, args = self._build_select()
-
-        if conn is None:
-            new_conn = self._data_source.get_reusable_connection()
-            try:
-                new_conn.acquire(operation_id=self._operation_id)
-                new_conn.begin()
-                result = self._data_source.get_executor().select_one(
-                    new_conn, sql, args
-                )
-                new_conn.commit()
-                return result
-            finally:
-                new_conn.release(operation_id=self._operation_id)
-        else:
-            return self._data_source.get_executor().select_one(conn, sql, args)
-
-    def list(self, conn: ReusableMysqlConnection | None = None) -> list[dict[str, Any]]:
-        if len(self._select_fields) == 0:
-            self._select_fields = self._model_field_names
-
-        self._apply_before_query_middlewares()
-
-        sql, args = self._build_select()
-
-        if conn is None:
-            new_conn = self._data_source.get_reusable_connection()
-            try:
-                new_conn.acquire(operation_id=self._operation_id)
-                new_conn.begin()
-                rows = self._data_source.get_executor().select_many(new_conn, sql, args)
-                new_conn.commit()
-                return rows
-            finally:
-                new_conn.release(operation_id=self._operation_id)
-
-        return self._data_source.get_executor().select_many(conn, sql, args)
-
-    def page(
-        self, page: int, page_size: int, conn: ReusableMysqlConnection | None = None
-    ) -> tuple[List[dict[str, Any]], int]:
-        if len(self._select_fields) == 0:
-            self._select_fields = self._model_field_names
-
-        self._apply_before_query_middlewares()
-
-        self._limit = page_size
-        self._offset = (page - 1) * page_size
-
-        sql, args = self._build_select()
-
-        if conn is None:
-            new_conn = self._data_source.get_reusable_connection()
-            count = self._count(new_conn)
-            if count == 0:
-                return [], count
-            try:
-                new_conn.acquire(operation_id=self._operation_id)
-                new_conn.begin()
-                rows = self._data_source.get_executor().select_many(new_conn, sql, args)
-                new_conn.commit()
-                return rows, count
-            finally:
-                new_conn.release(operation_id=self._operation_id)
-
-        count = self._count(conn)
-        if count == 0:
-            return [], count
-        rows = self._data_source.get_executor().select_many(conn, sql, args)
-        return rows, count
-
-    def _count(self, conn: ReusableMysqlConnection) -> int:
-        table = (
-            self._table if self._database is None else f"{self._database}.{self._table}"
-        )
-        sql = f"SELECT COUNT(*) FROM {table}"
-        args = ()
-        tree = self._where.tree()
-        if len(tree.conditions) > 0:
-            exp, args = tree.parse()
-            sql += " WHERE " + exp
-
-        return self._data_source.get_executor().select_one(conn, sql, args)["COUNT(*)"]
-
-    def count(self, conn: ReusableMysqlConnection | None = None) -> int:
-        self._apply_before_query_middlewares()
-
-        if conn is None:
-            new_conn = self._data_source.get_reusable_connection()
-            try:
-                new_conn.acquire()
-                new_conn.begin()
-                count = self._count(new_conn)
-                new_conn.commit()
-                return count
-            finally:
-                new_conn.release(operation_id=self._operation_id)
-        return self._count(conn)
-
-    def _build_select(self) -> tuple[str, tuple[Any, ...]]:
-        select_fields = [
-            field for field in self._select_fields if field not in self._ignore_fields
-        ]
-
-        table = (
-            self._table if self._database is None else f"{self._database}.{self._table}"
-        )
-        sql = f'SELECT {"DISTINCT " if self._distinct and self._select_fields else ""}{",".join(select_fields)} FROM {table}'
-        args = ()
-        tree = self._where.tree()
-        if len(tree.conditions) > 0:
-            exp, args = tree.parse()
-            sql += " WHERE " + exp
-        if self._order_by is not None:
-            sql += f' ORDER BY {",".join(self._order_by)}'
-        if self._limit is not None:
-            sql += f" LIMIT {self._limit}"
-        if self._offset is not None:
-            sql += f" OFFSET {self._offset}"
-
-        return sql, args
-
-    def _apply_before_query_middlewares(self):
-        middlewares = get_middlewares(Middleware.BEFORE_QUERY)
-        if middlewares is None or len(middlewares) == 0:
-            return
-        for middleware in middlewares:
+    if load_middlewares:
+        for middleware in before_query_middlewares:
             if callable(middleware):
-                middleware(self)
+                middleware(wrapper)
+
+    sql, args = wrapper.build_count_sql()
+
+    if conn is None:
+        new_conn = data_source.get_reusable_connection()
+        try:
+            new_conn.acquire(operation_id=operation_id)
+            new_conn.begin()
+            result = data_source.get_executor().select_one(new_conn, sql, args)
+            new_conn.commit()
+
+            if result is None:
+                return 0
+            return result["COUNT(*)"]
+        finally:
+            new_conn.release(operation_id=operation_id)
+    else:
+        result = data_source.get_executor().select_one(conn, sql, args)
+        if result is None:
+            return 0
+        return result["COUNT(*)"]
 
 
-class Query(DictQuery, Generic[T]):
-    def __init__(
-        self, cls: Type[T], database: str | None, data_source: MysqlDataSource
-    ):
-        if not hasattr(cls, "__table_name__"):
-            raise ValueError("invalid model class")
-        super().__init__(cls.__table_name__, database, data_source)
-        self._cls = cls
+def page(
+    wrapper: QueryWrapper[T],
+    conn: ReusableMysqlConnection | None = None,
+    data_source: MysqlDataSource | None = None,
+    current: int = 1,
+    page_size: int = 10,
+) -> Tuple[List[T], int]:
+    if data_source is None:
+        raise ValueError("data_source must be provided")
 
-    def eq(self, field: str, value: Any) -> "Query":
-        super().eq(field, value)
-        return self
+    rows, total = page_dict(wrapper, conn, data_source, current, page_size)
+    if rows is None:
+        return [], 0
+    return [wrapper.get_type()(**row) for row in rows], total
 
-    def ne(self, field: str, value: Any) -> "Query":
-        super().ne(field, value)
-        return self
 
-    def gt(self, field: str, value: Any) -> "Query":
-        super().gt(field, value)
-        return self
+def page_dict(
+    wrapper: QueryWrapper[T],
+    conn: ReusableMysqlConnection | None = None,
+    data_source: MysqlDataSource | None = None,
+    current: int = 1,
+    page_size: int = 10,
+) -> Tuple[List[Dict[str, Any]], int]:
+    if data_source is None:
+        raise ValueError("data_source must be provided")
 
-    def ge(self, field: str, value: Any) -> "Query":
-        super().ge(field, value)
-        return self
+    operation_id = generate_random_string("R-", 10)
 
-    def lt(self, field: str, value: Any) -> "Query":
-        super().lt(field, value)
-        return self
+    for middleware in before_query_middlewares:
+        if callable(middleware):
+            middleware(wrapper)
 
-    def le(self, field: str, value: Any) -> "Query":
-        super().le(field, value)
-        return self
+    wrapper.limit(page_size).offset((current - 1) * page_size)
+    sql, args = wrapper.build_sql()
 
-    def in_(self, field: str, value: Any) -> "Query":
-        super().in_(field, value)
-        return self
+    if conn is None:
+        new_conn = data_source.get_reusable_connection()
+        total = count(wrapper, new_conn, data_source, load_middlewares=False)
+        if total == 0:
+            return [], total
+        try:
+            new_conn.acquire(operation_id=operation_id)
+            new_conn.begin()
+            rows = data_source.get_executor().select_many(new_conn, sql, args)
+            new_conn.commit()
+            return rows, total
+        finally:
+            new_conn.release(operation_id=operation_id)
 
-    def l_like(self, field: str, value: Any) -> "Query":
-        super().l_like(field, value)
-        return self
-
-    def r_like(self, field: str, value: Any) -> "Query":
-        super().r_like(field, value)
-        return self
-
-    def like(self, field: str, value: Any) -> "Query":
-        super().like(field, value)
-        return self
-
-    def or_(self, or_: Or) -> "Query":
-        super().or_(or_)
-        return self
-
-    def desc(self, *order_by) -> "Query":
-        super().desc(*order_by)
-        return self
-
-    def asc(self, *order_by) -> "Query":
-        super().asc(*order_by)
-        return self
-
-    def limit(self, limit: int) -> "Query":
-        self._limit = limit
-        return self
-
-    def offset(self, offset: int) -> "Query":
-        self._offset = offset
-        return self
-
-    def one(self, conn: ReusableMysqlConnection | None = None) -> T | None:
-        if len(self._select_fields) == 0:
-            self._select_fields = [f.name for f in fields(self._cls)]
-
-        row = super().one(conn)
-        if row is None:
-            return None
-        return self._cls(**row)
-
-    def list(self, conn: ReusableMysqlConnection | None = None) -> List[T]:
-        if len(self._select_fields) == 0:
-            self._select_fields = [f.name for f in fields(self._cls)]
-
-        rows = super().list(conn)
-        return [self._cls(**row) for row in rows]
-
-    def page(
-        self, page: int, page_size: int, conn: ReusableMysqlConnection | None = None
-    ) -> tuple[List, int]:
-        if len(self._select_fields) == 0:
-            self._select_fields = [f.name for f in fields(self._cls)]
-
-        rows, count = super().page(page, page_size, conn)
-        return [self._cls(**row) for row in rows], count
+    total = count(wrapper, conn, data_source, load_middlewares=False)
+    if total == 0:
+        return [], total
+    rows = data_source.get_executor().select_many(conn, sql, args)
+    return rows, total

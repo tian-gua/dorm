@@ -11,22 +11,18 @@ from .. import settings
 
 
 class ReusableMysqlConnection:
-    def __init__(
-        self, data_source_id: str, create_connection: Callable[[], Connection]
-    ):
+    def __init__(self, data_source_id: str, create_connection: Callable[[], Connection]):
         self._data_source_id = data_source_id
         self._lock = threading.Lock()
         self._create_connection = create_connection
-        self._conn = None
+        self._conn: Connection | None = None
         self._active = False
         self._closed = False
         self._in_use = False  # 添加使用中标记
 
         self._stop_event = threading.Event()  # 添加停止事件
         # 其他初始化代码
-        self._keep_alive_thread = threading.Thread(
-            target=self._keep_alive_worker, daemon=True
-        )
+        self._keep_alive_thread = threading.Thread(target=self._keep_alive_worker, daemon=True)
         self._keep_alive_thread.start()
 
     def is_locked(self) -> bool:
@@ -38,7 +34,7 @@ class ReusableMysqlConnection:
         """
         return self._lock.locked()
 
-    def acquire(self, timeout: float = 5, operation_id: str = None):
+    def acquire(self, timeout: float = 5, operation_id: str | None = None):
         if settings.enable_connection_lock_log:
             logger.debug(
                 f"[{operation_id}] try to lock connection[{id(self._conn)}] with timeout {timeout} seconds."
@@ -51,19 +47,15 @@ class ReusableMysqlConnection:
                     self._active = True
                     logger.info(f"[{self._data_source_id}] Connection created.")
                 if settings.enable_connection_lock_log:
-                    logger.debug(
-                        f"'[{operation_id}] Connection[{id(self._conn)}] locked."
-                    )
+                    logger.debug(f"'[{operation_id}] Connection[{id(self._conn)}] locked.")
             except Exception as e:
                 self._in_use = False  # 添加这行
                 self._lock.release()  # 添加这行
                 raise ConnectionException(f"Failed to create connection: {e}")
         else:
-            raise ConnectionException(
-                f"Failed to acquire connection within {timeout} seconds."
-            )
+            raise ConnectionException(f"Failed to acquire connection within {timeout} seconds.")
 
-    def release(self, operation_id: str = None):
+    def release(self, operation_id: str | None = None):
         self._in_use = False  # 取消使用中标记
         self._lock.release()
         if settings.enable_connection_lock_log:
@@ -76,15 +68,17 @@ class ReusableMysqlConnection:
             )
         if self._closed:
             raise ConnectionException(f"[{self._data_source_id}] Connection is closed.")
-        if not self._active or not self._conn:
-            raise ConnectionException(
-                f"[{self._data_source_id}] Connection is not active."
-            )
+        if not self._active:
+            raise ConnectionException(f"[{self._data_source_id}] Connection is not active.")
 
     def cursor(self) -> DictCursor:
         self._check_connection()
         try:
-            return self._conn.cursor()
+            if self._conn is None:
+                raise ConnectionException(
+                    f"[{self._data_source_id}] Connection is not initialized."
+                )
+            return self._conn.cursor()  # type: ignore
         except MySQLError as e:
             logger.error(
                 f"[{self._data_source_id}] Connection[{id(self._conn)}] cursor creation failed: {e}"
@@ -94,30 +88,34 @@ class ReusableMysqlConnection:
                 logger.info(
                     f"[{self._data_source_id}] Connection[{id(self._conn)}] recreated after cursor failure."
                 )
-                return self._conn.cursor()
+                return self._conn.cursor()  # type: ignore
             except Exception as recreate_error:
                 logger.error(
                     f"[{self._data_source_id}] Failed to recreate connection: {recreate_error}"
                 )
                 self._active = False
-                raise ConnectionException(
-                    f"Connection recreation failed: {recreate_error}"
-                )
+                raise ConnectionException(f"Connection recreation failed: {recreate_error}")
 
     def begin(self):
         self._check_connection()
         try:
+            if self._conn is None:
+                raise ConnectionException(
+                    f"[{self._data_source_id}] Connection is not initialized."
+                )
             self._conn.begin()
         except MySQLError as e:
-            logger.error(
-                f"[{self._data_source_id}] Connection[{id(self._conn)}] begin failed: {e}"
-            )
+            logger.error(f"[{self._data_source_id}] Connection[{id(self._conn)}] begin failed: {e}")
             self._recreate_connection()
             raise ConnectionException(f"Transaction begin failed: {e}")
 
     def commit(self):
         self._check_connection()
         try:
+            if self._conn is None:
+                raise ConnectionException(
+                    f"[{self._data_source_id}] Connection is not initialized."
+                )
             self._conn.commit()
         except MySQLError as e:
             logger.error(
@@ -165,9 +163,7 @@ class ReusableMysqlConnection:
             try:
                 if self._conn:
                     self._conn.close()
-                    logger.info(
-                        f"[{self._data_source_id}] Connection[{id(self._conn)}] closed."
-                    )
+                    logger.info(f"[{self._data_source_id}] Connection[{id(self._conn)}] closed.")
             except MySQLError as e:
                 logger.error(
                     f"[{self._data_source_id}] Connection[{id(self._conn)}] close failed: {e}"

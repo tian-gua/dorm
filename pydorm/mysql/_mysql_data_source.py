@@ -11,14 +11,16 @@ from ._mysql_table_inspector import mysql_table_inspector
 
 
 class MysqlDataSource:
-    def __init__(self, data_source_id, host, port, user, password, database):
-        self._data_source_id = data_source_id
-        self._dialect = "mysql"
-        self._host = host
-        self._port = port
-        self._user = user
-        self._password = password
-        self._database = database
+    def __init__(
+        self, data_source_id: str, host: str, port: int, user: str, password: str, database: str
+    ):
+        self._data_source_id: str = data_source_id
+        self._dialect: str = "mysql"
+        self._host: str = host
+        self._port: int = port
+        self._user: str = user
+        self._password: str = password
+        self._database: str = database
         self._reusable_connection: ReusableMysqlConnection = ReusableMysqlConnection(
             self._data_source_id,
             self.create_connection,
@@ -75,8 +77,7 @@ class MysqlDataSource:
                 self._reusable_connection, database or self._database, table
             )
             fields = [
-                (table_field["field_"], any, field(default=None))
-                for table_field in table_structure
+                (table_field["field_"], any, field(default=None)) for table_field in table_structure
             ]
             self._models[key] = make_dataclass(key, fields=fields)
         return self._models[key]

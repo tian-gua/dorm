@@ -1,7 +1,7 @@
 from typing import Any, TypeVar
 
+from ._delete_wrapper import DeleteWrapper
 from ._middlewares import before_query_middlewares
-from ._update_wrapper import UpdateWrapper
 from .mysql._mysql_data_source import MysqlDataSource
 from .mysql._reusable_mysql_connection import ReusableMysqlConnection
 from .utils.random_utils import generate_random_string
@@ -9,21 +9,18 @@ from .utils.random_utils import generate_random_string
 T = TypeVar("T", bound=Any)
 
 
-def update(
-    wrapper: UpdateWrapper[T],
+def delete(
+    wrapper: DeleteWrapper[T],
     conn: ReusableMysqlConnection | None = None,
     data_source: MysqlDataSource | None = None,
 ) -> int:
     if wrapper._where.count() == 0:
-        raise ValueError("where condition is required for update operation")
-
-    if len(wrapper._update_fields) == 0:
-        raise ValueError("update fields are required")
+        raise ValueError("where condition is required for delete operation")
 
     if data_source is None:
         raise ValueError("data_source must be provided")
 
-    operation_id = generate_random_string("U-", 10)
+    operation_id = generate_random_string("D-", 10)
 
     for middleware in before_query_middlewares:
         if callable(middleware):

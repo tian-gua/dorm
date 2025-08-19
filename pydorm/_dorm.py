@@ -1,16 +1,24 @@
-from typing import Type, TypeVar, List, Dict, Any
+from dataclasses import asdict
+from typing import Any, Dict, List, Literal, Tuple, Type, TypeVar
 
 from loguru import logger
 from pymysql.cursors import DictCursor
 
 from ._data_source_storage import DataSourceStorage
-from ._insert import Insert
-from ._query import Query, DictQuery
-from ._update import Update
+from ._delete import delete
+from ._delete_wrapper import DeleteWrapper
+from ._insert import insert, insert_bulk
+from ._insert_wrapper import InsertWrapper
+from ._query import find, find_dict
+from ._query import list as list_obj
+from ._query import list_dict
+from ._query_wrapper import QueryWrapper
+from ._update import update
+from ._update_wrapper import UpdateWrapper
 from .mysql import ReusableMysqlConnection
 from .utils.random_utils import generate_random_string
 
-T = TypeVar("T")
+T = TypeVar("T", bound=Any)
 
 
 class Dorm:
@@ -30,17 +38,99 @@ class Dorm:
         self._init = True
         logger.info("dorm initialized")
 
-    def query(
-        self, cls: Type[T], database: str | None = None, data_source_id="default"
-    ):
-        return Query(cls, database=database, data_source=self._dss.get(data_source_id))
+    def find(
+        self,
+        wrapper: QueryWrapper[T],
+        conn: ReusableMysqlConnection | None = None,
+        data_source_id="default",
+    ) -> T | None:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        return find(wrapper, conn=conn, data_source=ds)
 
-    def dict_query(
-        self, cls: Type[T], database: str | None = None, data_source_id="default"
-    ):
-        return DictQuery(
-            cls, database=database, data_source=self._dss.get(data_source_id)
-        )
+    def find_dict(
+        self,
+        wrapper: QueryWrapper[T],
+        conn: ReusableMysqlConnection | None = None,
+        data_source_id="default",
+    ) -> Dict[str, Any] | None:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        return find_dict(wrapper, conn=conn, data_source=ds)
+
+    def list(
+        self,
+        wrapper: QueryWrapper[T],
+        conn: ReusableMysqlConnection | None = None,
+        data_source_id="default",
+    ) -> List[T]:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        return list_obj(wrapper, conn=conn, data_source=ds)
+
+    def list_dict(
+        self,
+        wrapper: QueryWrapper[T],
+        conn: ReusableMysqlConnection | None = None,
+        data_source_id="default",
+    ) -> List[Dict[str, Any]]:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        return list_dict(wrapper, conn=conn, data_source=ds)
+
+    def insert(
+        self,
+        cls: Type[T],
+        data: Dict[str, Any] | T,
+        duplicate_key_update: List[str] | Literal["all"] | None = None,
+        conn: ReusableMysqlConnection | None = None,
+        data_source_id="default",
+    ) -> Tuple[int, int]:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        wrapper = InsertWrapper[T](cls)
+        dict_data: Dict[str, Any] = data if isinstance(data, Dict) else asdict(data)
+        return insert(wrapper, dict_data, duplicate_key_update, conn=conn, data_source=ds)
+
+    def insert_bulk(
+        self,
+        wrapper: InsertWrapper[T],
+        data: List[Dict[str, Any]],
+        duplicate_key_update: List[str] | Literal["all"] | None = None,
+        conn: ReusableMysqlConnection | None = None,
+        data_source_id="default",
+    ) -> int:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        return insert_bulk(wrapper, data, duplicate_key_update, conn=conn, data_source=ds)
+
+    def update(
+        self,
+        wrapper: UpdateWrapper[T],
+        conn: ReusableMysqlConnection | None = None,
+        data_source_id="default",
+    ) -> int:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        return update(wrapper, conn=conn, data_source=ds)
+
+    def delete(
+        self,
+        wrapper: DeleteWrapper[T],
+        conn: ReusableMysqlConnection | None = None,
+        data_source_id="default",
+    ) -> int:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        return delete(wrapper, conn=conn, data_source=ds)
 
     def raw_query(
         self,
@@ -48,13 +138,16 @@ class Dorm:
         args: tuple[Any, ...],
         conn: ReusableMysqlConnection | None = None,
         data_source_id="default",
-    ) -> List[Dict]:
+    ) -> List[Dict[str, Any]]:
         raw_query_id = generate_random_string("raw-query-", 10)
 
         sql = sql.replace("?", "%s")
 
         if conn is None:
-            new_conn = self._dss.get(data_source_id).get_reusable_connection()
+            ds = self._dss.get(data_source_id)
+            if ds is None:
+                raise ValueError(f"Data source with ID '{data_source_id}' not found")
+            new_conn = ds.get_reusable_connection()
             try:
                 new_conn.acquire(operation_id=raw_query_id)
                 new_conn.begin()
@@ -78,43 +171,19 @@ class Dorm:
                 return []
             return list(rows)
 
-    def update(
-        self,
-        table_or_cls: str | Type[T],
-        database: str | None = None,
-        data_source_id="default",
-    ) -> Update:
-        if isinstance(table_or_cls, str):
-            table = table_or_cls
-        else:
-            table = table_or_cls.__table_name__
-        return Update(table, database, data_source=self._dss.get(data_source_id))
-
-    def insert(
-        self,
-        table_or_cls: str | Type[T],
-        database: str | None = None,
-        data_source_id="default",
-    ) -> Insert:
-        if isinstance(table_or_cls, str):
-            table = table_or_cls
-        else:
-            table = table_or_cls.__table_name__
-        return Insert(table, database, data_source=self._dss.get(data_source_id))
-
     def begin(self, data_source_id="default") -> ReusableMysqlConnection:
         self._tx_id = generate_random_string("tx-", 10)
 
         data_source = self._dss.get(data_source_id)
+        if data_source is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
         conn = data_source.get_reusable_connection()
         conn.acquire(operation_id=self._tx_id)
         try:
             conn.begin()
             return conn
         except Exception as e:
-            logger.error(
-                f"Failed to begin transaction on data source '{data_source_id}': {e}"
-            )
+            logger.error(f"Failed to begin transaction on data source '{data_source_id}': {e}")
             conn.release(operation_id=self._tx_id)
             raise e
 
@@ -152,9 +221,7 @@ class Dorm:
         password: str,
         database: str,
     ):
-        self._dss.add_datasource(
-            data_source_id, dialect, host, port, user, password, database
-        )
+        self._dss.add_datasource(data_source_id, dialect, host, port, user, password, database)
 
     def get_data_source(self, data_source_id="default"):
         return self._dss.get(data_source_id)

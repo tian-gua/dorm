@@ -1,0 +1,20 @@
+{
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+
+  "reportMissingImports": "error",
+  "reportMissingModuleSource": "warning",
+
+  "reportOptionalMemberAccess": "warning",
+  "reportOptionalSubscript": "warning",
+  "reportOptionalCall": "warning",
+
+  "reportUnknownVariableType": "information",
+  "reportUnknownArgumentType": "information",
+  "reportUnknownLambdaType": "information",
+
+  "reportUnusedImport": "information",
+  "reportUnusedVariable": "information",
+  "reportDuplicateImport": "information"
+}
