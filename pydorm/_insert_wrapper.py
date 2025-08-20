@@ -20,6 +20,8 @@ class InsertWrapper(Generic[T]):
         values: List[Any] = []
         for k, v in data.items():
             if k in self._fields:
+                if v is None:
+                    continue
                 keys.append(k)
                 values.append(v)
                 placeholder.append("?")
