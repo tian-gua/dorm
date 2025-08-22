@@ -229,8 +229,11 @@ class Dorm:
         user: str,
         password: str,
         database: str,
+        **options: Any,
     ):
-        self._dss.add_datasource(data_source_id, dialect, host, port, user, password, database)
+        self._dss.add_datasource(
+            data_source_id, dialect, host, port, user, password, database, **options
+        )
 
     def get_data_source(self, data_source_id="default"):
         return self._dss.get(data_source_id)

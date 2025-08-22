@@ -12,7 +12,14 @@ from ._mysql_table_inspector import mysql_table_inspector
 
 class MysqlDataSource:
     def __init__(
-        self, data_source_id: str, host: str, port: int, user: str, password: str, database: str
+        self,
+        data_source_id: str,
+        host: str,
+        port: int,
+        user: str,
+        password: str,
+        database: str,
+        **options: Any,
     ):
         self._data_source_id: str = data_source_id
         self._dialect: str = "mysql"
@@ -27,6 +34,7 @@ class MysqlDataSource:
         )
         self._executor: MysqlExecutor = mysql_executor
         self._models: Dict[str, Type[Any]] = {}
+        self._options: Dict[str, Any] = options
 
     def get_id(self) -> str:
         return self._data_source_id
@@ -51,6 +59,7 @@ class MysqlDataSource:
                 cursorclass=DictCursor,
                 charset="utf8mb4",  # 添加字符集
                 autocommit=False,  # 设置自动提交为False,
+                **self._options,  # 传递其他选项
             )
             logger.info(f"[{self._data_source_id}] create connection [{id(conn)}]")
             return conn

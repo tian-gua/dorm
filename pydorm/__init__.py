@@ -7,7 +7,7 @@ from ._query_wrapper import QueryWrapper
 from ._update_wrapper import UpdateWrapper
 
 __author__ = "melon"
-__version__ = "0.10.1"
+__version__ = "0.10.2"
 
 __all__ = [
     "init",

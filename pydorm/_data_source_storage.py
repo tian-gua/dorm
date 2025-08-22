@@ -41,6 +41,7 @@ class DataSourceStorage:
         user: str,
         password: str,
         database: str,
+        **options: Any,
     ):
         if dialect is None or dialect == "":
             raise ValueError("dialect is required")
@@ -66,6 +67,7 @@ class DataSourceStorage:
                 user=user,
                 password=password,
                 database=database,
+                **options,
             )
             self._data_sources[data_source_id] = mysql_ds
         else:
