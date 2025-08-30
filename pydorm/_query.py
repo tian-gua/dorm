@@ -42,9 +42,7 @@ def find_dict(
         try:
             new_conn.acquire(operation_id=operation_id)
             new_conn.begin()
-            result: Dict[str, Any] | None = data_source.get_executor().select_one(
-                new_conn, sql, args
-            )
+            result: Dict[str, Any] | None = data_source.get_executor().select_one(new_conn, sql, args)
             new_conn.commit()
             return result
         finally:
@@ -84,9 +82,7 @@ def list_dict(
         try:
             new_conn.acquire(operation_id=operation_id)
             new_conn.begin()
-            result: List[Dict[str, Any]] | None = data_source.get_executor().select_many(
-                new_conn, sql, args
-            )
+            result: List[Dict[str, Any]] | None = data_source.get_executor().select_many(new_conn, sql, args)
             new_conn.commit()
             return result
         finally:
@@ -170,12 +166,12 @@ def page_dict(
 
     if conn is None:
         new_conn = data_source.get_reusable_connection()
-        total = count(wrapper, new_conn, data_source, load_middlewares=False)
-        if total == 0:
-            return [], total
         try:
             new_conn.acquire(operation_id=operation_id)
             new_conn.begin()
+            total = count(wrapper, new_conn, data_source, load_middlewares=False)
+            if total == 0:
+                return [], total
             rows = data_source.get_executor().select_many(new_conn, sql, args)
             new_conn.commit()
             return rows, total

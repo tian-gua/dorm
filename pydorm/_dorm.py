@@ -9,9 +9,7 @@ from ._delete import delete
 from ._delete_wrapper import DeleteWrapper
 from ._insert import insert, insert_bulk
 from ._insert_wrapper import InsertWrapper
-from ._query import find, find_dict
-from ._query import list as list_obj
-from ._query import list_dict
+from ._query import find, find_dict, list as list_obj, list_dict, page as page_obj, page_dict
 from ._query_wrapper import QueryWrapper
 from ._update import update
 from ._update_wrapper import UpdateWrapper
@@ -90,6 +88,32 @@ class Dorm:
         if ds is None:
             raise ValueError(f"Data source with ID '{data_source_id}' not found")
         return list_dict(wrapper, conn=conn, data_source=ds)
+
+    def page(
+        self,
+        wrapper: QueryWrapper[T],
+        current: int,
+        page_size: int,
+        conn: ReusableMysqlConnection | None = None,
+        data_source_id="default",
+    ) -> Tuple[List[T], int]:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        return page_obj(wrapper, conn=conn, data_source=ds, current=current, page_size=page_size)
+
+    def page_dict(
+        self,
+        wrapper: QueryWrapper[T],
+        current: int,
+        page_size: int,
+        conn: ReusableMysqlConnection | None = None,
+        data_source_id="default",
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        return page_dict(wrapper, conn=conn, data_source=ds, current=current, page_size=page_size)
 
     def insert(
         self,
@@ -231,9 +255,7 @@ class Dorm:
         database: str,
         **options: Any,
     ):
-        self._dss.add_datasource(
-            data_source_id, dialect, host, port, user, password, database, **options
-        )
+        self._dss.add_datasource(data_source_id, dialect, host, port, user, password, database, **options)
 
     def get_data_source(self, data_source_id="default"):
         return self._dss.get(data_source_id)
