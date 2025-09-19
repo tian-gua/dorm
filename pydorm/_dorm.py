@@ -9,7 +9,7 @@ from ._delete import delete
 from ._delete_wrapper import DeleteWrapper
 from ._insert import insert, insert_bulk
 from ._insert_wrapper import InsertWrapper
-from ._query import find, find_dict, list as list_obj, list_dict, page as page_obj, page_dict
+from ._query import find, find_dict, list as list_obj, list_dict, page as page_obj, page_dict, count
 from ._query_wrapper import QueryWrapper
 from ._update import update
 from ._update_wrapper import UpdateWrapper
@@ -114,6 +114,14 @@ class Dorm:
         if ds is None:
             raise ValueError(f"Data source with ID '{data_source_id}' not found")
         return page_dict(wrapper, conn=conn, data_source=ds, current=current, page_size=page_size)
+
+    def count(
+        self, wrapper: QueryWrapper[T], conn: ReusableMysqlConnection | None = None, data_source_id="default"
+    ) -> int:
+        ds = self._dss.get(data_source_id)
+        if ds is None:
+            raise ValueError(f"Data source with ID '{data_source_id}' not found")
+        return count(wrapper, conn=conn, data_source=ds)
 
     def insert(
         self,
